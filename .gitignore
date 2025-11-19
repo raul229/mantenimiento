@@ -1,0 +1,12 @@
+# Backend (ej: Python)
+backend/venv/
+backend/.env
+backend/.idea/
+backend/__pycache__/
+backend/*.pyc
+
+# Frontend (ej: Node.js)
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.DS_Store
