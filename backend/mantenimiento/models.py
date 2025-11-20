@@ -46,7 +46,7 @@ class Mantenimiento(models.Model):
         ('correctivo', 'correctivo')
     )
     vehiculo = models.ForeignKey(Vehiculo, on_delete=models.CASCADE)
-    fallas=models.ManyToManyField(Falla)
+    fallas=models.ManyToManyField(Falla, related_name='mantenimientos')
     tipo_mantenimiento = models.CharField(max_length=20, choices=TIPO_MANTENIMIENTO, default='preventivo')
     descripcion = models.TextField()
     costo = models.DecimalField(max_digits=10, decimal_places=2)
