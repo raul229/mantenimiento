@@ -37,7 +37,7 @@ class Falla(models.Model):
     estado = models.CharField(max_length=20, choices=ESTADOS_CHOICES, default='pendiente')
     prioridad = models.CharField(max_length=20, choices=PRIORIDAD_CHOICES, default='media')
     descripcion = models.TextField()
-    fecha_repostado = models.DateField()
+    fecha_reportado = models.DateField()
     fecha_solucionado = models.DateField(null=True, blank=True)
 
 class Mantenimiento(models.Model):
