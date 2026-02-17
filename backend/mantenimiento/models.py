@@ -40,6 +40,9 @@ class Falla(models.Model):
     fecha_reportado = models.DateField()
     fecha_solucionado = models.DateField(null=True, blank=True)
 
+    def __str__(self):
+        return self.descripcion
+
 class Mantenimiento(models.Model):
     TIPO_MANTENIMIENTO = (
         ('preventivo', 'preventivo'),
