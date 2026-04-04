@@ -62,11 +62,23 @@ class Viaje(models.Model):
     conductor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     ruta=models.ForeignKey(Ruta, on_delete=models.SET_NULL, null=True)
     kilometraje_inicio = models.IntegerField()
-    kilometraje_final = models.IntegerField()
+    kilometraje_final = models.IntegerField(null=True, blank=True)
     estado = models.CharField(max_length=15, choices=ESTADO_VIAJE_CHOICES)
     fecha_inicio= models.DateField()
     fecha_fin= models.DateField()
     observaciones= models.TextField()
+
+    def save(self,*args, **kwargs):
+        if self._state.adding and self.vehiculo and self.kilometraje_inicio is None:
+            self.kilometraje_inicio=self.vehiculo.kilometraje_actual or 0
+        super().save(*args, **kwargs)
+
+        if self.kilometraje_final:
+            if self.kilometraje_final > self.vehiculo.kilometraje_actual:
+                self.vehiculo.kilometraje_actual = self.kilometraje_final
+                self.vehiculo.save()
+
+
 
 class Recojo(models.Model):
     viaje = models.ForeignKey(Viaje, on_delete=models.SET_NULL, null=True)

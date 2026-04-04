@@ -33,6 +33,35 @@ class ViajeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Viaje
         fields = '__all__'
+        read_only_fields = ['kilometraje_inicio']
+
+    def validate(self, data):
+        km_inicio=data.get('kilometraje_inicio')
+        km_final=data.get('kilometraje_final')
+
+        # Si km_inicio es None (nuevo viaje), tomarlo del vehículo
+        if km_inicio is None and 'vehiculo' in data and data['vehiculo']:
+            km_inicio = data['vehiculo'].kilometraje_actual or 0
+
+        if km_final is not None and km_inicio is not None:
+            if km_final < km_inicio:
+                raise serializers.ValidationError({
+                    'kilometraje_final': 'El kilometraje final no puede ser menor al inicial'
+                })
+
+        fecha_inicio=data.get('fecha_inicio')
+        fecha_fin=data.get('fecha_fin')
+        if fecha_fin and fecha_fin:
+            if fecha_fin < fecha_inicio:
+                raise serializers.ValidationError(
+                    {
+                        'fecha_fin': 'La fecha final no puede ser menos a la inical'
+
+                    }
+                )
+
+
+        return data
 
 class RecojoSerializer(serializers.ModelSerializer):
     class Meta:

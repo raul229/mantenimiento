@@ -15,6 +15,7 @@ class Vehiculo(models.Model):
     placa = models.CharField(max_length=50)
     carga_neta_kg = models.IntegerField(null=True, blank=True)
     estado =models.CharField(max_length=50, choices=ESTADOS_CHOICES, default='activo')
+    kilometraje_actual=models.IntegerField(default=0)
 
     def __str__(self):
         return f'{self.marca} - {self.placa}'
