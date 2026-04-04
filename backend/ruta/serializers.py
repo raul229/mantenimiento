@@ -1,5 +1,14 @@
 from rest_framework import serializers
-from .models import Ciudad, Cliente, Sede, Ruta, Viaje, Recojo
+from .models import Ciudad, Cliente, Sede, Ruta, Viaje, Recojo, Celular,Persona
+
+class CelularSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Celular
+        fields = '__all__'
+class PersonaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model= Persona
+        fields = '__all__'
 
 class CiudadSerializer(serializers.ModelSerializer):
     class Meta:
@@ -29,3 +38,4 @@ class RecojoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Recojo
         fields = '__all__'
+

@@ -1,8 +1,15 @@
 from rest_framework import viewsets
-from .models import Ciudad, Cliente, Sede, Ruta, Viaje, Recojo
+from .models import Ciudad, Cliente, Sede, Ruta, Viaje, Recojo, Celular, Persona
 from .serializers import CiudadSerializer, ClienteSerializer, SedeSerializer, RutaSerializer, ViajeSerializer, \
-    RecojoSerializer
+    RecojoSerializer, CelularSerializer, PersonaSerializer
 
+class CelularViewSet(viewsets.ModelViewSet):
+    queryset = Celular.objects.all()
+    serializer_class = CelularSerializer
+
+class PersonaViewSet(viewsets.ModelViewSet):
+    queryset = Persona.objects.all()
+    serializer_class = PersonaSerializer
 
 class CiudadViewSet(viewsets.ModelViewSet):
     queryset = Ciudad.objects.all()
