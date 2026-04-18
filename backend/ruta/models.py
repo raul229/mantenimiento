@@ -11,31 +11,32 @@ class Ciudad(models.Model):
     def __str__(self):
         return self.nombre
 
+class Cliente (models.Model):
+    numero_documento= models.CharField(max_length=11,unique=True)
+    razon_social  = models.CharField(max_length=50)
 
-class Celular(models.Model):
-    numero= models.CharField(max_length=9)
+    def __str__(self):
+        return f'{self.numero_documento} {self.razon_social}'
 
 class Persona(models.Model):
     nombre = models.CharField(max_length=50)
     apellido_paterno = models.CharField(max_length=50)
     apellido_materno = models.CharField(max_length=50)
     cargo=models.CharField(max_length=50)
-    celular= models.ForeignKey(Celular, on_delete=models.SET_NULL, null=True)
+    cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True, related_name='personas')
 
     def __str__(self):
         return f'{self.nombre} {self.apellido_paterno}'
 
-class Cliente (models.Model):
-    numero_documento= models.CharField(max_length=11,)
-    razon_social  = models.CharField(max_length=50)
-    persona = models.ForeignKey(Persona, on_delete=models.SET_NULL, null=True)
+class Celular(models.Model):
+    numero = models.CharField(max_length=9, unique=True)
+    persona = models.ForeignKey(Persona, on_delete=models.SET_NULL, null=True, blank=True, related_name='celulares')
 
-    def __str__(self):
-        return f'{self.numero_documento} {self.razon_social}'
+
 
 class Sede(models.Model):
     nombre = models.CharField(max_length=50)
-    cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True)
+    cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, related_name='sedes')
     direccion = models.CharField(max_length=100)
     coordenadas = models.CharField(max_length=100) # por el moento hasta que  implementemos la cootdenada
     ciudad = models.ForeignKey(Ciudad, on_delete=models.SET_NULL, null=True)
@@ -85,5 +86,5 @@ class Recojo(models.Model):
     sede = models.ForeignKey(Sede, on_delete=models.SET_NULL, null=True)
     peso_kg = models.DecimalField(max_digits=10, decimal_places=2)
     fecha = models.DateField()
-    observaciones= models.TextField()
+    observaciones= models.TextField(blank=True)
 

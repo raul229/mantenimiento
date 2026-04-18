@@ -6,9 +6,50 @@ class CelularSerializer(serializers.ModelSerializer):
         model = Celular
         fields = '__all__'
 class PersonaSerializer(serializers.ModelSerializer):
+    celulares = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+    )
+
     class Meta:
         model= Persona
         fields = '__all__'
+
+    def create(self, validated_data):
+        celulares = validated_data.pop('celulares')
+        persona = Persona.objects.create(**validated_data)
+        #creamos o asociamos si ya existen
+        for numero in celulares:
+            celular, creado = Celular.objects.get_or_create(numero=numero, defaults={'persona': persona})
+            #
+            if not  creado and celular.persona != persona:
+                celular.persona = persona
+                celular.save()
+        return persona
+    def update(self, instance, validated_data):
+
+        celulares = validated_data.pop('celulares')
+        for atributo, valor in validated_data.items():
+            setattr(instance, atributo, valor)
+        instance.save()
+        numeros_nuevos= set(celulares)
+        #optenemos los celualres de esta persona, y lo convertimos en una lista
+        numeros_actules = set(instance.celulares.values_list('numero', flat=True))
+
+        for numero in numeros_nuevos:
+            celular, creado = Celular.objects.get_or_create(
+                numero=numero,
+                defaults={ 'persona': instance,}
+            )
+            if not creado and celular.persona != instance:
+                celular.persona = instance
+                celular.save()
+
+        #desbilculas numeros que ya no vienen, no los borramos
+        for numero in numeros_actules- numeros_nuevos:
+            Celular.objects.filter(numero= numero, persona= instance).update(persona=None)
+
+        return  instance
 
 class CiudadSerializer(serializers.ModelSerializer):
     class Meta:
