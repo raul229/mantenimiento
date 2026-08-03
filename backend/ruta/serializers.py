@@ -65,6 +65,54 @@ class SedeSerializer(serializers.ModelSerializer):
         model = Sede
         fields = '__all__'
 
+    def validate(self, data):
+        errors = {}
+        # En creación/actualización exigir cliente, ciudad y direccion
+        cliente = data.get('cliente') if 'cliente' in data else getattr(self.instance, 'cliente', None)
+        ciudad = data.get('ciudad') if 'ciudad' in data else getattr(self.instance, 'ciudad', None)
+        direccion = data.get('direccion') if 'direccion' in data else getattr(self.instance, 'direccion', None)
+        persona = data.get('persona') if 'persona' in data else getattr(self.instance, 'persona', None)
+
+        if not cliente:
+            errors['cliente'] = 'Cliente es requerido.'
+        if not ciudad:
+            errors['ciudad'] = 'Ciudad es requerida.'
+        if not direccion or str(direccion).strip() == '':
+            errors['direccion'] = 'Dirección es requerida.'
+
+        # persona y coordenadas pueden ser opcionales, no validar como requeridos
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        # Si nombre no viene, autogenerarlo para devolverlo en la representación
+        if not data.get('nombre'):
+            cliente_obj = None
+            ciudad_obj = None
+            # Si tenemos instacia y no vienen objetos completos, tratamos de resolver
+            if isinstance(cliente, int):
+                from .models import Cliente as ClienteModel
+                try:
+                    cliente_obj = ClienteModel.objects.get(pk=cliente)
+                except ClienteModel.DoesNotExist:
+                    cliente_obj = None
+            else:
+                cliente_obj = cliente
+
+            if isinstance(ciudad, int):
+                from .models import Ciudad as CiudadModel
+                try:
+                    ciudad_obj = CiudadModel.objects.get(pk=ciudad)
+                except CiudadModel.DoesNotExist:
+                    ciudad_obj = None
+            else:
+                ciudad_obj = ciudad
+
+            nombre_auto = f"{getattr(cliente_obj, 'razon_social', '')} - {getattr(ciudad_obj, 'nombre', '')}".strip()
+            data['nombre'] = nombre_auto
+
+        return data
+
 class RutaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ruta
@@ -108,4 +156,3 @@ class RecojoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Recojo
         fields = '__all__'
-
