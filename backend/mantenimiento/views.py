@@ -14,13 +14,31 @@ class MantenimientoViewSet(viewsets.ModelViewSet):
     serializer_class = MantenimientoSerializer
     
     def perform_create(self, serializer):
-        # Guardar el mantenimiento y actualizar las fallas relacionadas
-        fallas_ids = serializer.validated_data.pop('fallas_ids', [])
-        vehiculo = serializer.validated_data.pop('vehiculo')
-        data = serializer.validated_data
-        mantenimiento = MantenimientoService.crear_mantenimiento(vehiculo, fallas_ids, **data)
-        serializer.instance = mantenimiento
-    
+        data= serializer.validated_data.copy()
+        
+        vehiculo = data.pop('vehiculo')
+        fallas=data.pop('fallas', [])
+        
+        serializer.instance = MantenimientoService.crear_mantenimiento(
+            vehiculo=vehiculo,
+            fallas=fallas,
+            **data
+            )
+        
+        
+    def perform_update(self, serializer):
+        data= serializer.validated_data.copy()
+        
+        vehiculo = data.pop('vehiculo', None)
+        fallas=data.pop('fallas', None)
+        
+        serializer.instance = MantenimientoService.actualizar_mantenimiento(
+            mantenimiento=serializer.instance,
+            vehiculo=vehiculo,
+            fallas=fallas,
+            **data
+            )
+            
 
 class DocumentoViewSet(viewsets.ModelViewSet):
     queryset = Documento.objects.all()

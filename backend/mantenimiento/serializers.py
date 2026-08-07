@@ -16,13 +16,32 @@ class VehiculoSerializer(serializers.ModelSerializer):
         model = Vehiculo
         fields = '__all__'
 
+
+class VehiculoSimpleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vehiculo
+        fields = ( "id", "marca", "placa")
+       
+        
 class FallaSerializer(serializers.ModelSerializer):
     # fecha_solucionado: opcional, permitir null/blank en input
     fecha_solucionado = OptionalDateField(allow_null=True, required=False)
+    vehiculo = VehiculoSimpleSerializer(read_only=True)
+    vehiculo_id =serializers.PrimaryKeyRelatedField(
+        queryset=Vehiculo.objects.all(),
+        source='vehiculo',  # Esto indica que se asignará a la relación 'vehiculo' del modelo
+        write_only=True
+    )
 
     class Meta:
         model= Falla
         fields = '__all__'
+        
+    def validate_fecha_solucionado(self, value):
+        # Permitir None o fecha válida, pero no cadena vacía
+        if value == "":
+            raise serializers.ValidationError("Fecha de solucionado no puede ser una cadena vacía.")
+        return value
 
     def validate(self, data):
         # Normalizar strings vacíos a None para fechas
@@ -50,16 +69,11 @@ class DocumentoSerializer(serializers.ModelSerializer):
         model = Documento
         fields = '__all__'
         
-class VehiculoSimpleSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Vehiculo
-        fields = ( "id", "marca", "placa")
-        
 class FallaSimpleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model= Falla
-        fields = ("descripcion",)
+        fields = ("id","descripcion",)
 
 
 class MantenimientoSerializer(serializers.ModelSerializer):
@@ -85,7 +99,8 @@ class MantenimientoSerializer(serializers.ModelSerializer):
         many=True,
         queryset=Falla.objects.all(),
         write_only=True,
-        #source='fallas' # Esto indica que se asignará a la relación 'fallas' del modelo
+        source='fallas', # Esto indica que se asignará a la relación 'fallas' del modelo
+        required=False  # Permitir que sea opcional
     )
 
     class Meta:

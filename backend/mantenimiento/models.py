@@ -58,7 +58,7 @@ class Mantenimiento(models.Model):
     descripcion = models.TextField()
     # Permitimos crear mantenimientos sin costo ni fecha_fin
     costo = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    fecha_inicio = models.DateField()
+    fecha_inicio = models.DateField(default=timezone.now)
     fecha_fin = models.DateField(null=True, blank=True)
     proveedor = models.CharField(max_length=50)#posible tabla en el futuro
     #id uusuario que realizo el mantenimiento
