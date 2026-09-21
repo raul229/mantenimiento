@@ -2,7 +2,7 @@ export function Modal({ open, title, onClose, onSubmit, submitLabel = "Guardar",
   if (!open) return null;
   return (
     <dialog className="modal modal-open" aria-labelledby="modal-title">
-      <div className={`modal-box bg-base-100 ${wide ? "max-w-2xl" : ""}`}>
+      <div className={`modal-box bg-base-100 ${wide ? "max-w-4xl" : ""}`}>
         <h2 id="modal-title" className="text-lg font-bold">{title}</h2>
         <div className="max-h-[70vh] space-y-3 overflow-y-auto py-4">{children}</div>
         <div className="modal-action">

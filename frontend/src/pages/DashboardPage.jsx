@@ -2,19 +2,26 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Scale, Truck, Users, Wallet } from "lucide-react";
-import { DashboardService } from "@/service/api";
+import { DashboardService, CiudadService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { KpiCard } from "@/components/KpiCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ESTADO_VIAJE, ESTADO_FLOTA, formatKg, formatMoney, monthISO } from "@/utils/format";
-import { inputClass, selectClass } from "@/components/Modal";
+import { inputClass } from "@/components/Modal";
+import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const [mes, setMes] = useState(monthISO());
   const [ciudad, setCiudad] = useState("");
+  const [ciudades, setCiudades] = useState([]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [modalCiudad, setModalCiudad] = useState(false);
+
+  useEffect(() => {
+    CiudadService.getAll().then((res) => setCiudades(asCiudades(res.data)));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -42,12 +49,14 @@ export function DashboardPage() {
   return (
     <>
       <Topbar title="Panel operativo">
-        <select className={`${selectClass} w-44`} value={ciudad} onChange={(e) => setCiudad(e.target.value)}>
-          <option value="">Todas las ciudades</option>
-          {(d.ciudades || []).map((c) => (
-            <option key={c.id} value={c.id}>{c.nombre}</option>
-          ))}
-        </select>
+        <CiudadFields
+          filter
+          value={ciudad}
+          onChange={setCiudad}
+          ciudades={ciudades}
+          placeholder="Todas las ciudades"
+          onNueva={() => setModalCiudad(true)}
+        />
         <input type="month" className={`${inputClass} w-40`} value={mes} onChange={(e) => setMes(e.target.value)} />
       </Topbar>
       <div className="space-y-4 p-6">
@@ -61,7 +70,7 @@ export function DashboardPage() {
           <KpiCard
             title="Viajes hoy"
             value={d.viajes_hoy ?? 0}
-            hint={`${d.viajes_en_curso ?? 0} en curso`}
+            hint={`${d.viajes_en_curso ?? 0} en proceso`}
             icon={<Truck size={18} />}
           />
           <KpiCard
@@ -205,6 +214,14 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
+      <NuevaCiudadModal
+        open={modalCiudad}
+        onClose={() => setModalCiudad(false)}
+        onCreated={(nueva) => {
+          setCiudades((prev) => mergeCiudad(prev, nueva));
+          setCiudad(String(nueva.id));
+        }}
+      />
     </>
   );
 }

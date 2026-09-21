@@ -1,57 +1,65 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Plus, Search } from "lucide-react";
-import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { ViajeService, VehiculoService, RutaService, UsuarioService, CiudadService } from "@/service/api";
+import { Plus, Search, X } from "lucide-react";
+import { ViajeService, VehiculoService, RutaService, UsuarioService, CiudadService, SedeService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { DataTable } from "@/components/DataTable";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Modal, Field, inputClass, selectClass } from "@/components/Modal";
-import {
-  ESTADO_VIAJE, ESTADO_RECOJO, formatKg, formatMoney, formatDate, todayISO,
-} from "@/utils/format";
+import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass } from "@/components/Modal";
+import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
+import { ESTADO_VIAJE, formatKg, formatMoney, formatDate, todayISO } from "@/utils/format";
 
-const emptyForm = {
+const emptyViaje = {
   vehiculo: "",
   conductor: "",
   ruta: "",
   fecha_inicio: todayISO(),
   estado: "programado",
   hora_salida: "",
-  hora_retorno_est: "",
 };
 
+const emptyRuta = { nombre: "", descripcion: "", sedes: [] };
+
 export function ViajesPage() {
+  const [tab, setTab] = useState("viajes");
   const [viajes, setViajes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
   const [rutas, setRutas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [ciudades, setCiudades] = useState([]);
+  const [sedes, setSedes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
+  const [rutaId, setRutaId] = useState(null);
   const [q, setQ] = useState("");
   const [estado, setEstado] = useState("");
   const [ciudad, setCiudad] = useState("");
-  const [fecha, setFecha] = useState(todayISO());
-  const [modal, setModal] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [fecha, setFecha] = useState("");
+  const [modalViaje, setModalViaje] = useState(false);
+  const [modalRuta, setModalRuta] = useState(false);
+  const [modalCiudad, setModalCiudad] = useState(false);
+  const [form, setForm] = useState(emptyViaje);
+  const [rutaForm, setRutaForm] = useState(emptyRuta);
+  const [sedeToAdd, setSedeToAdd] = useState("");
 
   const load = async () => {
     setLoading(true);
     try {
-      const [v, ve, r, u, c] = await Promise.all([
+      const [v, ve, r, u, c, s] = await Promise.all([
         ViajeService.getAll(),
         VehiculoService.getAll(),
         RutaService.getAll(),
         UsuarioService.getAll(),
         CiudadService.getAll(),
+        SedeService.getAll(),
       ]);
       setViajes(v.data);
       setVehiculos(ve.data);
       setRutas(r.data);
       setUsuarios(u.data);
-      setCiudades(c.data);
+      setCiudades(asCiudades(c.data));
+      setSedes(s.data);
     } finally {
       setLoading(false);
     }
@@ -64,7 +72,7 @@ export function ViajesPage() {
       if (fecha && v.fecha_inicio !== fecha) return false;
       if (estado && v.estado !== estado) return false;
       if (ciudad && v.ciudad !== ciudades.find((c) => String(c.id) === String(ciudad))?.nombre) return false;
-      const hay = `${v.ruta_data?.nombre || ""} ${v.vehiculo_data?.placa || ""}`.toLowerCase();
+      const hay = `${v.ruta_data?.nombre || ""} ${v.vehiculo_data?.placa || ""} ${v.conductor_data?.nombre || ""}`.toLowerCase();
       return hay.includes(q.toLowerCase());
     });
   }, [viajes, fecha, estado, ciudad, q, ciudades]);
@@ -80,26 +88,89 @@ export function ViajesPage() {
     };
   }, [viajes, fecha]);
 
-  const selected = viajes.find((v) => v.id === selectedId) || filtered[0] || null;
+  const selected = viajes.find((v) => v.id === selectedId) || null;
+  const selectedRuta = rutas.find((r) => r.id === rutaId) || null;
+  const recojoPorSede = Object.fromEntries((selected?.recojos || []).map((r) => [r.sede, r]));
 
-  const save = async () => {
+  const saveViaje = async () => {
+    if (!form.vehiculo || !form.conductor) {
+      toast.error("Asigna vehículo y conductor");
+      return;
+    }
     try {
       await ViajeService.create({
-        vehiculo: form.vehiculo || null,
-        conductor: form.conductor || null,
+        vehiculo: form.vehiculo,
+        conductor: form.conductor,
         ruta: form.ruta || null,
         fecha_inicio: form.fecha_inicio,
         estado: form.estado,
         hora_salida: form.hora_salida || null,
-        hora_retorno_est: form.hora_retorno_est || null,
       });
-      toast.success("Viaje creado");
-      setModal(false);
-      setForm({ ...emptyForm, fecha_inicio: todayISO() });
+      toast.success("Viaje creado con las sedes de la ruta");
+      setModalViaje(false);
+      setForm({ ...emptyViaje, fecha_inicio: todayISO() });
+      load();
+    } catch (err) {
+      const data = err?.response?.data;
+      const msg = data?.conductor?.[0] || data?.vehiculo?.[0] || "No se pudo crear el viaje";
+      toast.error(msg);
+    }
+  };
+
+  const saveRuta = async () => {
+    if (!rutaForm.nombre.trim()) {
+      toast.error("Indica el nombre de la ruta");
+      return;
+    }
+    try {
+      const { id, ...payload } = rutaForm;
+      if (id) {
+        await RutaService.update(id, payload);
+        toast.success("Ruta actualizada");
+      } else {
+        await RutaService.create(payload);
+        toast.success("Ruta creada");
+      }
+      setModalRuta(false);
+      setRutaForm(emptyRuta);
       load();
     } catch {
-      toast.error("No se pudo crear el viaje");
+      toast.error("No se pudo guardar la ruta");
     }
+  };
+
+  const patchSedesViaje = async (nextIds) => {
+    if (!selected) return;
+    try {
+      await ViajeService.patch(selected.id, { sedes: nextIds });
+      load();
+    } catch {
+      toast.error("No se pudieron actualizar las sedes del viaje");
+    }
+  };
+
+  const addSedeViaje = () => {
+    if (!sedeToAdd) return;
+    const current = (selected?.sedes_data || []).map((s) => s.id);
+    if (current.includes(Number(sedeToAdd))) return;
+    patchSedesViaje([...current, Number(sedeToAdd)]);
+    setSedeToAdd("");
+  };
+
+  const removeSedeViaje = (sedeId) => {
+    if (recojoPorSede[sedeId]) {
+      toast.error("No se puede quitar una sede que ya tiene recojo");
+      return;
+    }
+    patchSedesViaje((selected?.sedes_data || []).map((s) => s.id).filter((id) => id !== sedeId));
+  };
+
+  const toggleSedeRuta = (sedeId) => {
+    const ids = rutaForm.sedes.map(Number);
+    setRutaForm({
+      ...rutaForm,
+      sedes: ids.includes(sedeId) ? ids.filter((id) => id !== sedeId) : [...ids, sedeId],
+    });
   };
 
   const columns = [
@@ -107,12 +178,26 @@ export function ViajesPage() {
     { header: "Vehículo", render: (v) => v.vehiculo_data?.placa || "—" },
     { header: "Conductor", render: (v) => v.conductor_data?.nombre || "—" },
     { header: "Estado", render: (v) => <StatusBadge map={ESTADO_VIAJE} value={v.estado} /> },
-    { header: "Progreso", render: (v) => `${v.paradas_hechas}/${v.paradas_total} paradas` },
+    {
+      header: "Progreso",
+      render: (v) => {
+        const total = v.paradas_total || 0;
+        const hechas = v.paradas_hechas || 0;
+        const pct = total ? Math.round((hechas / total) * 100) : 0;
+        return `${hechas}/${total} sedes · ${pct}%`;
+      },
+    },
     { header: "Kg", render: (v) => formatKg(v.kg_total) },
   ];
 
+  const rutaColumns = [
+    { header: "Ruta", accessor: "nombre" },
+    { header: "Sedes", render: (r) => r.sedes_count ?? (r.sedes_data || []).length },
+    { header: "Descripción", render: (r) => r.descripcion || "—" },
+  ];
+
+  const sedesDisponiblesViaje = sedes.filter((s) => !(selected?.sedes_data || []).some((x) => x.id === s.id));
   const gastos = selected?.gastos || [];
-  const residuos = selected?.residuos || [];
 
   return (
     <>
@@ -120,46 +205,82 @@ export function ViajesPage() {
       <div className="flex min-h-0 flex-1 gap-4 p-6">
         <div className="min-w-0 flex-1 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <select className={`${selectClass} w-40`} value={ciudad} onChange={(e) => setCiudad(e.target.value)}>
-              <option value="">Ciudad</option>
-              {ciudades.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-            <input type="date" className={`${inputClass} w-40`} value={fecha} onChange={(e) => setFecha(e.target.value)} />
-            <select className={`${selectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
-              <option value="">Estado</option>
-              <option value="programado">Pendiente</option>
-              <option value="en curso">En curso</option>
-              <option value="completado">Completado</option>
-            </select>
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-              <input className={`${inputClass} w-48 pl-9`} placeholder="Buscar ruta o placa" value={q} onChange={(e) => setQ(e.target.value)} />
-            </div>
-            <button
-              type="button"
-              onClick={() => setModal(true)}
-              className="btn btn-primary ml-auto"
-            >
-              <Plus size={16} /> Nuevo viaje
+            <button type="button" className={`btn btn-sm rounded-full ${tab === "viajes" ? "btn-primary" : "btn-ghost bg-base-100"}`} onClick={() => setTab("viajes")}>
+              Viajes
             </button>
+            <button type="button" className={`btn btn-sm rounded-full ${tab === "rutas" ? "btn-primary" : "btn-ghost bg-base-100"}`} onClick={() => setTab("rutas")}>
+              Rutas
+            </button>
+            {tab === "viajes" && (
+              <button type="button" onClick={() => setModalViaje(true)} className="btn btn-primary ml-auto">
+                <Plus size={16} /> Nuevo viaje
+              </button>
+            )}
+            {tab === "rutas" && (
+              <button
+                type="button"
+                onClick={() => { setRutaForm(emptyRuta); setModalRuta(true); }}
+                className="btn btn-primary ml-auto"
+              >
+                <Plus size={16} /> Nueva ruta
+              </button>
+            )}
           </div>
-          <div className="grid grid-cols-5 gap-3">
-            <Mini n={kpis.total} label="viajes" />
-            <Mini n={kpis.curso} label="en curso" />
-            <Mini n={kpis.done} label="completados" />
-            <Mini n={kpis.pend} label="pendientes" />
-            <Mini n={formatKg(kpis.kg)} label="recolectados" />
-          </div>
-          <DataTable
-            columns={columns}
-            data={filtered}
-            loading={loading}
-            onRowClick={(row) => setSelectedId(row.id)}
-            selectedId={selected?.id}
-            empty="No hay viajes para estos filtros"
-          />
+
+          {tab === "viajes" && (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <CiudadFields
+                  filter
+                  value={ciudad}
+                  onChange={setCiudad}
+                  ciudades={ciudades}
+                  placeholder="Ciudad"
+                  onNueva={() => setModalCiudad(true)}
+                />
+                <input type="date" className={`${filterClass} w-40`} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+                <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
+                  <option value="">Estado</option>
+                  <option value="programado">Pendiente</option>
+                  <option value="en curso">En proceso</option>
+                  <option value="completado">Completado</option>
+                </select>
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-2.5 text-muted" />
+                  <input className={`${filterClass} w-48 pl-9`} placeholder="Buscar ruta, placa o conductor" value={q} onChange={(e) => setQ(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-5 gap-3">
+                <Mini n={kpis.total} label="viajes" />
+                <Mini n={kpis.curso} label="en proceso" />
+                <Mini n={kpis.done} label="completados" />
+                <Mini n={kpis.pend} label="pendientes" />
+                <Mini n={formatKg(kpis.kg)} label="recolectados" />
+              </div>
+              <DataTable
+                columns={columns}
+                data={filtered}
+                loading={loading}
+                onRowClick={(row) => setSelectedId(row.id)}
+                selectedId={selected?.id}
+                empty="No hay viajes para estos filtros"
+              />
+            </>
+          )}
+
+          {tab === "rutas" && (
+            <DataTable
+              columns={rutaColumns}
+              data={rutas}
+              loading={loading}
+              onRowClick={(row) => setRutaId(row.id)}
+              selectedId={selectedRuta?.id}
+              empty="No hay rutas. Crea un paquete de sedes."
+            />
+          )}
         </div>
-        {selected && (
+
+        {tab === "viajes" && selected && (
           <DetailPanel
             title={selected.ruta_data?.nombre || `Viaje #${selected.id}`}
             badge={<StatusBadge map={ESTADO_VIAJE} value={selected.estado} />}
@@ -169,31 +290,52 @@ export function ViajesPage() {
             <Row label="Conductor" value={selected.conductor_data?.nombre || "—"} />
             <Row label="Ciudad" value={selected.ciudad || "—"} />
             <Row label="Salida" value={selected.hora_salida || "—"} />
-            <Row label="Retorno est." value={selected.hora_retorno_est || "—"} />
             <Row label="Fecha" value={formatDate(selected.fecha_inicio)} />
 
             <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">
-              Progreso {selected.paradas_hechas}/{selected.paradas_total} paradas
+              Progreso {selected.paradas_hechas}/{selected.paradas_total} sedes
             </h3>
-            <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-base-300">
               <div
-                className="h-full bg-accent"
+                className="h-full bg-primary"
                 style={{ width: `${selected.paradas_total ? (selected.paradas_hechas / selected.paradas_total) * 100 : 0}%` }}
               />
             </div>
             <ol className="space-y-2">
-              {(selected.recojos || []).map((r, i) => (
-                <li key={r.id} className="flex items-start justify-between gap-2 text-sm">
-                  <span>
-                    <span className="mr-2 font-semibold text-accent">{i + 1}</span>
-                    {r.sede_nombre || r.cliente_nombre || `Parada ${i + 1}`}
-                    <span className="block text-xs text-muted">{formatKg(r.peso_kg)}</span>
-                  </span>
-                  <StatusBadge map={ESTADO_RECOJO} value={r.estado} />
-                </li>
-              ))}
-              {!(selected.recojos || []).length && <p className="text-sm text-muted">Sin paradas aún</p>}
+              {(selected.sedes_data || []).map((s, i) => {
+                const recojo = recojoPorSede[s.id];
+                return (
+                  <li key={s.id} className="flex items-start justify-between gap-2 text-sm">
+                    <span>
+                      <span className="mr-2 font-semibold text-primary">{i + 1}</span>
+                      {s.nombre}
+                      <span className="block text-xs text-muted">
+                        {s.cliente_nombre || "—"} · {recojo ? formatKg(recojo.peso_kg) : "sin recojo"}
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      {recojo
+                        ? <span className="badge badge-success">Con recojo</span>
+                        : (
+                          <button type="button" className="btn btn-ghost btn-xs" onClick={() => removeSedeViaje(s.id)} title="Quitar sede">
+                            <X size={14} />
+                          </button>
+                        )}
+                    </span>
+                  </li>
+                );
+              })}
+              {!(selected.sedes_data || []).length && <p className="text-sm text-muted">Sin sedes. Agrégalas abajo o asocia una ruta.</p>}
             </ol>
+            <div className="mt-3 flex gap-2">
+              <select className={selectClass} value={sedeToAdd} onChange={(e) => setSedeToAdd(e.target.value)}>
+                <option value="">Agregar sede</option>
+                {sedesDisponiblesViaje.map((s) => (
+                  <option key={s.id} value={s.id}>{s.nombre} {s.cliente_nombre ? `· ${s.cliente_nombre}` : ""}</option>
+                ))}
+              </select>
+              <button type="button" className="btn btn-outline" onClick={addSedeViaje} disabled={!sedeToAdd}>Añadir</button>
+            </div>
 
             <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Costos del viaje</h3>
             {gastos.map((g) => (
@@ -201,37 +343,62 @@ export function ViajesPage() {
             ))}
             <Row label="Total" value={formatMoney(selected.costo_total)} />
             {!gastos.length && <p className="text-sm text-muted">Sin gastos registrados</p>}
+          </DetailPanel>
+        )}
 
-            <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Residuos del viaje</h3>
-            {residuos.length > 0 && (
-              <div className="h-28">
-                <ResponsiveContainer>
-                  <BarChart data={residuos}>
-                    <XAxis dataKey="nombre" tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(v) => formatKg(v)} />
-                    <Bar dataKey="peso" fill="#0f766e" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-            {!residuos.length && <p className="text-sm text-muted">Sin residuos clasificados</p>}
+        {tab === "rutas" && selectedRuta && (
+          <DetailPanel
+            title={selectedRuta.nombre}
+            subtitle={`${(selectedRuta.sedes_data || []).length} sedes`}
+            onClose={() => setRutaId(null)}
+          >
+            <p className="mb-4 text-sm text-muted">{selectedRuta.descripcion || "Sin descripción"}</p>
+            <ol className="space-y-2">
+              {(selectedRuta.sedes_data || []).map((s, i) => (
+                <li key={s.id} className="text-sm">
+                  <span className="mr-2 font-semibold text-primary">{i + 1}</span>
+                  {s.nombre}
+                  <span className="block text-xs text-muted">{s.cliente_nombre} · {s.ciudad_nombre || "—"}</span>
+                </li>
+              ))}
+            </ol>
+            <button
+              type="button"
+              className="btn btn-outline mt-4 w-full"
+              onClick={() => {
+                setRutaForm({
+                  id: selectedRuta.id,
+                  nombre: selectedRuta.nombre,
+                  descripcion: selectedRuta.descripcion || "",
+                  sedes: (selectedRuta.sedes || selectedRuta.sedes_data || []).map((s) => s.id || s),
+                });
+                setModalRuta(true);
+              }}
+            >
+              Editar sedes de la ruta
+            </button>
           </DetailPanel>
         )}
       </div>
-      <Modal open={modal} title="Nuevo viaje" onClose={() => setModal(false)} onSubmit={save}>
+
+      <Modal open={modalViaje} title="Nuevo viaje" onClose={() => setModalViaje(false)} onSubmit={saveViaje}>
+        <Field label="Ruta">
+          <select className={selectClass} value={form.ruta} onChange={(e) => setForm({ ...form, ruta: e.target.value })}>
+            <option value="">Sin ruta (agregar sedes después)</option>
+            {rutas.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.nombre} · {r.sedes_count ?? (r.sedes_data || []).length} sedes
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="Vehículo">
           <select className={selectClass} value={form.vehiculo} onChange={(e) => setForm({ ...form, vehiculo: e.target.value })}>
             <option value="">Seleccione</option>
             {vehiculos.map((v) => <option key={v.id} value={v.id}>{v.placa} · {v.marca}</option>)}
           </select>
         </Field>
-        <Field label="Ruta">
-          <select className={selectClass} value={form.ruta} onChange={(e) => setForm({ ...form, ruta: e.target.value })}>
-            <option value="">Seleccione</option>
-            {rutas.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-          </select>
-        </Field>
-        <Field label="Conductor">
+        <Field label="Conductor responsable">
           <select className={selectClass} value={form.conductor} onChange={(e) => setForm({ ...form, conductor: e.target.value })}>
             <option value="">Seleccione</option>
             {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
@@ -244,6 +411,41 @@ export function ViajesPage() {
           <input type="time" className={inputClass} value={form.hora_salida} onChange={(e) => setForm({ ...form, hora_salida: e.target.value })} />
         </Field>
       </Modal>
+
+      <Modal
+        open={modalRuta}
+        wide
+        title={rutaForm.id ? "Editar ruta" : "Nueva ruta"}
+        onClose={() => setModalRuta(false)}
+        onSubmit={saveRuta}
+      >
+        <Field label="Nombre">
+          <input className={inputClass} value={rutaForm.nombre} onChange={(e) => setRutaForm({ ...rutaForm, nombre: e.target.value })} />
+        </Field>
+        <Field label="Descripción">
+          <input className={inputClass} value={rutaForm.descripcion} onChange={(e) => setRutaForm({ ...rutaForm, descripcion: e.target.value })} />
+        </Field>
+        <p className="text-xs font-semibold uppercase text-muted">Sedes del paquete</p>
+        <div className="max-h-56 space-y-1 overflow-y-auto rounded-box border border-base-300 p-2">
+          {sedes.map((s) => (
+            <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-base-200">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm checkbox-primary"
+                checked={rutaForm.sedes.map(Number).includes(s.id)}
+                onChange={() => toggleSedeRuta(s.id)}
+              />
+              <span>{s.nombre} {s.cliente_nombre ? `· ${s.cliente_nombre}` : ""}</span>
+            </label>
+          ))}
+          {!sedes.length && <p className="p-2 text-sm text-muted">No hay sedes cargadas</p>}
+        </div>
+      </Modal>
+      <NuevaCiudadModal
+        open={modalCiudad}
+        onClose={() => setModalCiudad(false)}
+        onCreated={(nueva) => setCiudades((prev) => mergeCiudad(prev, nueva))}
+      />
     </>
   );
 }

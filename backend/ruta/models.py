@@ -22,13 +22,52 @@ class Cliente(models.Model):
         ('suspendido', 'Suspendido'),
     )
 
-    numero_documento = models.CharField(max_length=11, unique=True)
-    razon_social = models.CharField(max_length=50)
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES, default='privado')
     estado = models.CharField(max_length=12, choices=ESTADO_CHOICES, default='activo')
 
+    @property
+    def naturaleza(self):
+        if getattr(self, 'empresa', None) is not None:
+            return 'empresa'
+        if getattr(self, 'persona', None) is not None:
+            return 'persona'
+        return None
+
+    @property
+    def numero_documento(self):
+        empresa = getattr(self, 'empresa', None)
+        if empresa is not None:
+            return empresa.ruc
+        persona = getattr(self, 'persona', None)
+        if persona is not None:
+            return persona.ruc or persona.dni
+        return ''
+
+    @property
+    def razon_social(self):
+        empresa = getattr(self, 'empresa', None)
+        if empresa is not None:
+            return empresa.razon_social
+        persona = getattr(self, 'persona', None)
+        if persona is not None:
+            return str(persona)
+        return ''
+
     def __str__(self):
-        return f'{self.numero_documento} {self.razon_social}'
+        doc = self.numero_documento
+        nombre = self.razon_social
+        if doc or nombre:
+            return f'{doc} {nombre}'.strip()
+        return f'Cliente #{self.pk}'
+
+
+class Empresa(models.Model):
+    cliente = models.OneToOneField(Cliente, on_delete=models.CASCADE, related_name='empresa')
+    ruc = models.CharField(max_length=11, unique=True)
+    razon_social = models.CharField(max_length=80)
+
+    def __str__(self):
+        return f'{self.ruc} {self.razon_social}'
 
 
 class Persona(models.Model):
@@ -36,9 +75,28 @@ class Persona(models.Model):
     apellido_paterno = models.CharField(max_length=50)
     apellido_materno = models.CharField(max_length=50, blank=True, default='')
     cargo = models.CharField(max_length=50, blank=True, default='')
+    dni = models.CharField(max_length=8, blank=True, default='')
+    ruc = models.CharField(max_length=11, blank=True, default='')
+    cliente_propio = models.OneToOneField(
+        Cliente, on_delete=models.CASCADE, null=True, blank=True, related_name='persona'
+    )
     cliente = models.ForeignKey(
         Cliente, on_delete=models.SET_NULL, null=True, blank=True, related_name='personas'
     )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['dni'],
+                condition=~models.Q(dni=''),
+                name='unique_persona_dni',
+            ),
+            models.UniqueConstraint(
+                fields=['ruc'],
+                condition=~models.Q(ruc=''),
+                name='unique_persona_ruc',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.nombre} {self.apellido_paterno}'
@@ -84,6 +142,7 @@ class Viaje(models.Model):
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name='viajes'
     )
     ruta = models.ForeignKey(Ruta, on_delete=models.SET_NULL, null=True, related_name='viajes')
+    sedes = models.ManyToManyField(Sede, related_name='viajes', blank=True)
     kilometraje_inicio = models.IntegerField(null=True, blank=True)
     kilometraje_final = models.IntegerField(null=True, blank=True)
     estado = models.CharField(max_length=15, choices=ESTADO_VIAJE_CHOICES, default='programado')
@@ -117,6 +176,11 @@ class Recojo(models.Model):
     hora = models.TimeField(null=True, blank=True)
     estado = models.CharField(max_length=12, choices=ESTADO_CHOICES, default='pendiente')
     observaciones = models.TextField(blank=True, default='')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['viaje', 'sede'], name='unique_recojo_viaje_sede'),
+        ]
 
 
 class TipoResiduo(models.Model):

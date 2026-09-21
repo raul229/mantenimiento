@@ -1,34 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Plus, Search } from "lucide-react";
-import { RecojoService, TipoResiduoService, ViajeService, SedeService, CiudadService } from "@/service/api";
+import { RecojoService, ViajeService, CiudadService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { DataTable } from "@/components/DataTable";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass } from "@/components/Modal";
-import { ESTADO_RECOJO, formatDate, formatKg, formatKgPrecise, todayISO, monthISO } from "@/utils/format";
+import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
+import { ESTADO_RECOJO, formatDate, formatTime, formatKg, formatKgPrecise, monthISO } from "@/utils/format";
 
-function pesosFrom(recojo, tipos) {
-  const map = {};
-  tipos.forEach((t) => { map[t.id] = ""; });
-  (recojo?.detalles || []).forEach((d) => {
-    map[d.tipo] = String(d.peso_kg ?? "");
-  });
-  return map;
-}
-
-function toDetallesInput(pesos) {
-  return Object.entries(pesos)
-    .map(([tipo, peso]) => ({ tipo: Number(tipo), peso_kg: peso === "" ? 0 : Number(peso) }))
-    .filter((d) => d.peso_kg > 0);
-}
+const VIAJE_EN_PROCESO = new Set(["programado", "en curso"]);
 
 export function RecojosPage() {
   const [recojos, setRecojos] = useState([]);
-  const [tipos, setTipos] = useState([]);
   const [viajes, setViajes] = useState([]);
-  const [sedes, setSedes] = useState([]);
   const [ciudades, setCiudades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
@@ -37,33 +23,27 @@ export function RecojosPage() {
   const [ciudad, setCiudad] = useState("");
   const [fecha, setFecha] = useState("");
   const [modal, setModal] = useState(false);
-  const [pesos, setPesos] = useState({});
+  const [modalCiudad, setModalCiudad] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pesoEdit, setPesoEdit] = useState("");
   const [form, setForm] = useState({
     viaje: "",
     sede: "",
-    fecha: todayISO(),
-    hora: "",
-    estado: "completado",
+    peso_kg: "",
     observaciones: "",
-    pesos: {},
   });
 
   const load = async () => {
     setLoading(true);
     try {
-      const [r, t, v, s, c] = await Promise.all([
+      const [r, v, c] = await Promise.all([
         RecojoService.getAll(),
-        TipoResiduoService.getAll(),
         ViajeService.getAll(),
-        SedeService.getAll(),
         CiudadService.getAll(),
       ]);
       setRecojos(r.data);
-      setTipos(t.data);
       setViajes(v.data);
-      setSedes(s.data);
-      setCiudades(c.data);
+      setCiudades(asCiudades(c.data));
     } finally {
       setLoading(false);
     }
@@ -74,8 +54,24 @@ export function RecojosPage() {
   const selected = recojos.find((r) => r.id === selectedId) || null;
 
   useEffect(() => {
-    if (selected) setPesos(pesosFrom(selected, tipos));
-  }, [selectedId, recojos, tipos]);
+    if (selected) setPesoEdit(String(selected.peso_kg ?? ""));
+  }, [selectedId, recojos]);
+
+  const viajesEnProceso = useMemo(
+    () => viajes.filter((v) => {
+      if (!VIAJE_EN_PROCESO.has(v.estado)) return false;
+      const total = Number(v.paradas_total || 0);
+      return total > 0 && Number(v.paradas_hechas || 0) < total;
+    }),
+    [viajes],
+  );
+
+  const viajeForm = viajes.find((v) => String(v.id) === String(form.viaje));
+  const sedesPendientes = useMemo(() => {
+    if (!viajeForm) return [];
+    const ya = new Set((viajeForm.recojos || []).map((r) => String(r.sede)));
+    return (viajeForm.sedes_data || []).filter((s) => !ya.has(String(s.id)));
+  }, [viajeForm]);
 
   const filtered = useMemo(() => {
     return recojos.filter((r) => {
@@ -94,73 +90,50 @@ export function RecojosPage() {
   const kpis = useMemo(() => {
     const delMes = recojos.filter((r) => (r.fecha || "").startsWith(mes));
     const kgMes = delMes.reduce((s, r) => s + Number(r.peso_kg || 0), 0);
-    const pend = recojos.filter((r) => r.estado !== "completado").length;
-    const porTipo = {};
-    recojos.forEach((r) => {
-      if (!(r.fecha || "").startsWith(mes)) return;
-      (r.detalles || []).forEach((d) => {
-        const name = d.tipo_data?.nombre || "Otro";
-        porTipo[name] = (porTipo[name] || 0) + Number(d.peso_kg || 0);
-      });
-    });
-    return { total: recojos.length, kgMes, pend, porTipo };
+    return { total: recojos.length, kgMes, delMes: delMes.length };
   }, [recojos, mes]);
 
-  const sedesFiltradas = useMemo(() => {
-    if (!form.viaje) return sedes;
-    const viaje = viajes.find((v) => String(v.id) === String(form.viaje));
-    const ids = new Set((viaje?.recojos || []).map((r) => r.sede).filter(Boolean));
-    if (ids.size) return sedes.filter((s) => ids.has(s.id));
-    return sedes;
-  }, [form.viaje, viajes, sedes]);
-
   const openNew = () => {
-    const initial = {};
-    tipos.forEach((t) => { initial[t.id] = ""; });
-    setForm({
-      viaje: "",
-      sede: "",
-      fecha: todayISO(),
-      hora: "",
-      estado: "completado",
-      observaciones: "",
-      pesos: initial,
-    });
+    setForm({ viaje: "", sede: "", peso_kg: "", observaciones: "" });
     setModal(true);
   };
 
   const saveNew = async () => {
+    if (!form.viaje) {
+      toast.error("Selecciona un viaje en proceso");
+      return;
+    }
     if (!form.sede) {
       toast.error("Selecciona una sede");
       return;
     }
+    if (!form.peso_kg || Number(form.peso_kg) <= 0) {
+      toast.error("Indica los kilogramos");
+      return;
+    }
     try {
       await RecojoService.create({
-        viaje: form.viaje || null,
+        viaje: form.viaje,
         sede: form.sede,
-        fecha: form.fecha,
-        hora: form.hora || null,
-        estado: form.estado,
+        peso_kg: Number(form.peso_kg),
         observaciones: form.observaciones,
-        detalles_input: toDetallesInput(form.pesos),
       });
       toast.success("Recojo registrado");
       setModal(false);
       load();
-    } catch {
-      toast.error("No se pudo guardar el recojo");
+    } catch (err) {
+      const data = err?.response?.data;
+      const msg = data?.sede?.[0] || data?.viaje?.[0] || data?.peso_kg?.[0] || "No se pudo guardar el recojo";
+      toast.error(msg);
     }
   };
 
-  const savePesos = async (marcarCompletado = false) => {
+  const savePeso = async () => {
     if (!selected) return;
     setSaving(true);
     try {
-      await RecojoService.patch(selected.id, {
-        estado: marcarCompletado ? "completado" : selected.estado,
-        detalles_input: toDetallesInput(pesos),
-      });
-      toast.success(marcarCompletado ? "Recojo completado" : "Pesos actualizados");
+      await RecojoService.patch(selected.id, { peso_kg: Number(pesoEdit) || 0 });
+      toast.success("Kilogramos actualizados");
       load();
     } catch {
       toast.error("No se pudo actualizar el recojo");
@@ -171,26 +144,10 @@ export function RecojosPage() {
 
   const columns = [
     { header: "Fecha", render: (r) => formatDate(r.fecha) },
+    { header: "Hora", render: (r) => formatTime(r.hora) },
     { header: "Cliente", render: (r) => r.cliente_nombre || "—" },
     { header: "Sede", render: (r) => r.sede_nombre || "—" },
     { header: "Viaje", render: (r) => r.viaje_ruta || (r.viaje ? `#${r.viaje}` : "—") },
-    {
-      header: "Residuos",
-      render: (r) => (
-        <div className="flex flex-wrap gap-1">
-          {(r.detalles || []).length === 0 && <span className="text-muted">Sin clasificar</span>}
-          {(r.detalles || []).map((d) => (
-            <span
-              key={d.id}
-              className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
-              style={{ background: d.tipo_data?.color || "#0f9d8e" }}
-            >
-              {d.tipo_data?.nombre}
-            </span>
-          ))}
-        </div>
-      ),
-    },
     { header: "Kg", render: (r) => formatKgPrecise(r.peso_kg) },
     { header: "Estado", render: (r) => <StatusBadge map={ESTADO_RECOJO} value={r.estado} /> },
   ];
@@ -202,45 +159,32 @@ export function RecojosPage() {
         <div className="min-w-0 flex-1 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <input type="date" className={`${filterClass} w-40`} value={fecha} onChange={(e) => setFecha(e.target.value)} />
-            <select className={`${filterSelectClass} w-40`} value={ciudad} onChange={(e) => setCiudad(e.target.value)}>
-              <option value="">Ciudad</option>
-              {ciudades.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
+            <CiudadFields
+              filter
+              value={ciudad}
+              onChange={setCiudad}
+              ciudades={ciudades}
+              placeholder="Ciudad"
+              onNueva={() => setModalCiudad(true)}
+            />
             <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
               <option value="">Estado</option>
               <option value="pendiente">Pendiente</option>
-              <option value="en_sitio">En sitio</option>
               <option value="completado">Completado</option>
             </select>
             <div className="relative">
               <Search size={16} className="absolute left-3 top-2.5 text-muted" />
               <input className={`${filterClass} w-52 pl-9`} placeholder="Cliente, sede o ruta" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
-            <button
-              type="button"
-              onClick={openNew}
-              className="btn btn-primary ml-auto"
-            >
+            <button type="button" onClick={openNew} className="btn btn-primary ml-auto">
               <Plus size={16} /> Nuevo recojo
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <div className="grid grid-cols-3 gap-3">
             <Mini n={kpis.total} label="recojos" />
             <Mini n={formatKg(kpis.kgMes)} label="kg este mes" />
-            <Mini n={kpis.pend} label="pendientes" />
-            <div className="rounded-box bg-base-100 p-3 shadow-sm">
-              <p className="text-xs text-muted">Por tipo (mes)</p>
-              <div className="mt-1 space-y-1">
-                {Object.entries(kpis.porTipo).length === 0 && <p className="text-sm text-muted">Sin clasificar</p>}
-                {Object.entries(kpis.porTipo).slice(0, 3).map(([name, kg]) => (
-                  <p key={name} className="flex justify-between text-xs">
-                    <span>{name}</span>
-                    <span className="font-medium">{formatKg(kg)}</span>
-                  </p>
-                ))}
-              </div>
-            </div>
+            <Mini n={kpis.delMes} label="recojos del mes" />
           </div>
 
           <DataTable
@@ -261,110 +205,76 @@ export function RecojosPage() {
             onClose={() => setSelectedId(null)}
           >
             <Row label="Fecha" value={formatDate(selected.fecha)} />
-            <Row label="Hora" value={selected.hora || "—"} />
+            <Row label="Hora" value={formatTime(selected.hora)} />
             <Row label="Ciudad" value={selected.ciudad_nombre || "—"} />
             <Row label="Dirección" value={selected.sede_direccion || "—"} />
             <Row label="Viaje" value={selected.viaje_ruta || "—"} />
             <Row label="Vehículo" value={selected.vehiculo_placa || "—"} />
-            <Row label="Total" value={formatKgPrecise(selected.peso_kg)} />
-
-            <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Residuos (kg)</h3>
-            <div className="space-y-2">
-              {tipos.map((t) => (
-                <label key={t.id} className="flex items-center gap-2 text-sm">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} />
-                  <span className="w-36 shrink-0">{t.nombre}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className={inputClass}
-                    value={pesos[t.id] ?? ""}
-                    onChange={(e) => setPesos((prev) => ({ ...prev, [t.id]: e.target.value }))}
-                  />
-                </label>
-              ))}
-            </div>
+            <fieldset className="fieldset mt-4 p-0">
+              <legend className="fieldset-legend">Kilogramos</legend>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className={inputClass}
+                value={pesoEdit}
+                onChange={(e) => setPesoEdit(e.target.value)}
+              />
+            </fieldset>
             {selected.observaciones && (
               <p className="mt-3 text-sm text-muted">{selected.observaciones}</p>
             )}
-            <div className="mt-4 flex flex-col gap-2">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => savePesos(false)}
-                className="btn btn-outline w-full"
-              >
-                Guardar pesos
-              </button>
-              {selected.estado !== "completado" && (
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => savePesos(true)}
-                  className="btn btn-primary w-full"
-                >
-                  Marcar completado
-                </button>
-              )}
-            </div>
+            <button type="button" disabled={saving} onClick={savePeso} className="btn btn-primary mt-4 w-full">
+              Guardar kg
+            </button>
           </DetailPanel>
         )}
       </div>
 
-      <Modal open={modal} wide title="Nuevo recojo" onClose={() => setModal(false)} onSubmit={saveNew}>
-        <Field label="Viaje (opcional)">
+      <Modal open={modal} title="Nuevo recojo" onClose={() => setModal(false)} onSubmit={saveNew}>
+        <Field label="Viaje en proceso">
           <select className={selectClass} value={form.viaje} onChange={(e) => setForm({ ...form, viaje: e.target.value, sede: "" })}>
-            <option value="">Sin viaje</option>
-            {viajes.map((v) => (
+            <option value="">Seleccione</option>
+            {viajesEnProceso.map((v) => (
               <option key={v.id} value={v.id}>
-                #{v.id} {v.ruta_data?.nombre || ""} · {v.fecha_inicio} · {v.vehiculo_data?.placa || ""}
+                #{v.id} {v.ruta_data?.nombre || ""} · {v.vehiculo_data?.placa || ""} · {v.paradas_hechas}/{v.paradas_total} sedes
               </option>
             ))}
           </select>
         </Field>
+        {!viajesEnProceso.length && (
+          <p className="text-sm text-muted">No hay viajes con sedes pendientes de recojo.</p>
+        )}
         <Field label="Sede">
-          <select className={selectClass} value={form.sede} onChange={(e) => setForm({ ...form, sede: e.target.value })}>
-            <option value="">Seleccione</option>
-            {sedesFiltradas.map((s) => (
+          <select className={selectClass} value={form.sede} onChange={(e) => setForm({ ...form, sede: e.target.value })} disabled={!form.viaje}>
+            <option value="">{form.viaje ? "Seleccione una sede pendiente" : "Primero elige un viaje"}</option>
+            {sedesPendientes.map((s) => (
               <option key={s.id} value={s.id}>{s.nombre} {s.cliente_nombre ? `· ${s.cliente_nombre}` : ""}</option>
             ))}
           </select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Fecha">
-            <input type="date" className={inputClass} value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-          </Field>
-          <Field label="Hora">
-            <input type="time" className={inputClass} value={form.hora} onChange={(e) => setForm({ ...form, hora: e.target.value })} />
-          </Field>
-        </div>
-        <Field label="Estado">
-          <select className={selectClass} value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value })}>
-            <option value="pendiente">Pendiente</option>
-            <option value="en_sitio">En sitio</option>
-            <option value="completado">Completado</option>
-          </select>
+        {form.viaje && !sedesPendientes.length && (
+          <p className="text-sm text-warning">Todas las sedes de este viaje ya tienen recojo.</p>
+        )}
+        <Field label="Kilogramos">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            className={inputClass}
+            value={form.peso_kg}
+            onChange={(e) => setForm({ ...form, peso_kg: e.target.value })}
+          />
         </Field>
-        <p className="text-xs font-semibold uppercase text-muted">Residuos (kg)</p>
-        {tipos.map((t) => (
-          <label key={t.id} className="flex items-center gap-2 text-sm">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} />
-            <span className="w-36 shrink-0">{t.nombre}</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              className={inputClass}
-              value={form.pesos[t.id] ?? ""}
-              onChange={(e) => setForm({ ...form, pesos: { ...form.pesos, [t.id]: e.target.value } })}
-            />
-          </label>
-        ))}
         <Field label="Observaciones">
           <input className={inputClass} value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} />
         </Field>
       </Modal>
+      <NuevaCiudadModal
+        open={modalCiudad}
+        onClose={() => setModalCiudad(false)}
+        onCreated={(nueva) => setCiudades((prev) => mergeCiudad(prev, nueva))}
+      />
     </>
   );
 }

@@ -71,5 +71,6 @@ export const RutaService = crud("/rutas/");
 export const CiudadService = crud("/ciudades/");
 export const RecojoService = crud("/recojos/");
 export const SedeService = crud("/sedes/");
+export const PersonaService = crud("/personas/");
 export const TipoResiduoService = crud("/tipos-residuo/");
 export const UsuarioService = { getAll: () => api.get("/usuarios/") };

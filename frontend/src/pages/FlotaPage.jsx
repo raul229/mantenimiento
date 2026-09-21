@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Truck } from "lucide-react";
-import { VehiculoService, MantenimientoService, DocumentoService, UsuarioService } from "@/service/api";
+import { VehiculoService, MantenimientoService, DocumentoService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Modal, Field, inputClass, selectClass } from "@/components/Modal";
+import { Modal, Field, inputClass } from "@/components/Modal";
 import { ESTADO_FLOTA, formatDate, formatMoney } from "@/utils/format";
 
 const emptyForm = {
@@ -17,7 +17,6 @@ const emptyForm = {
   estado: "activo",
   kilometraje_actual: 0,
   nivel_combustible: 50,
-  conductor_asignado: "",
 };
 
 export function FlotaPage() {
@@ -25,7 +24,6 @@ export function FlotaPage() {
   const [vehiculos, setVehiculos] = useState([]);
   const [mantenimientos, setMantenimientos] = useState([]);
   const [documentos, setDocumentos] = useState([]);
-  const [usuarios, setUsuarios] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
@@ -37,13 +35,11 @@ export function FlotaPage() {
       VehiculoService.getAll(),
       MantenimientoService.getAll(),
       DocumentoService.getAll({ tipo_entidad: "vehiculo" }),
-      UsuarioService.getAll(),
     ])
-      .then(([v, m, d, u]) => {
+      .then(([v, m, d]) => {
         setVehiculos(v.data);
         setMantenimientos(m.data);
         setDocumentos(d.data);
-        setUsuarios(u.data);
       })
       .finally(() => setLoading(false));
   };
@@ -68,7 +64,6 @@ export function FlotaPage() {
       const payload = {
         ...form,
         anio: form.anio ? Number(form.anio) : null,
-        conductor_asignado: form.conductor_asignado || null,
       };
       await VehiculoService.create(payload);
       toast.success("Vehículo creado");
@@ -210,7 +205,7 @@ export function FlotaPage() {
             <Row label="VIN" value={selected.vin || "—"} />
             <Row label="Kilometraje" value={Number(selected.kilometraje_actual || 0).toLocaleString("es-PE")} />
             <Row label="Combustible" value={`${selected.nivel_combustible ?? 0}%`} />
-            <Row label="Conductor" value={selected.conductor_asignado_data?.nombre || "Sin asignar"} />
+            <Row label="Conductor" value="Se asigna en cada viaje" />
             <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Últimos mantenimientos</h3>
             {mantsOf(selected).slice(0, 4).map((m) => (
               <p key={m.id} className="mb-1 text-sm">{formatDate(m.fecha_inicio)} · {m.descripcion}</p>
@@ -229,12 +224,6 @@ export function FlotaPage() {
         <Field label="Modelo"><input className={inputClass} value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} /></Field>
         <Field label="Placa"><input className={inputClass} value={form.placa} onChange={(e) => setForm({ ...form, placa: e.target.value })} /></Field>
         <Field label="Año"><input className={inputClass} type="number" value={form.anio} onChange={(e) => setForm({ ...form, anio: e.target.value })} /></Field>
-        <Field label="Conductor">
-          <select className={selectClass} value={form.conductor_asignado} onChange={(e) => setForm({ ...form, conductor_asignado: e.target.value })}>
-            <option value="">Sin asignar</option>
-            {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        </Field>
       </Modal>
     </>
   );
