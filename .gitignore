@@ -5,6 +5,7 @@ backend/.idea/
 backend/__pycache__/
 backend/*.pyc
 backend/db.sqlite3
+backend/media/
 .idea/
 # Frontend (ej: Node.js)
 frontend/node_modules/
