@@ -7,6 +7,7 @@ import { ClientesPage } from "@/pages/ClientesPage";
 import { FlotaPage } from "@/pages/FlotaPage";
 import { ViajesPage } from "@/pages/ViajesPage";
 import { RecojosPage } from "@/pages/RecojosPage";
+import { EmisorPage } from "@/pages/EmisorPage";
 
 function Guard({ children }) {
   const { user, ready } = useAuth();
@@ -47,6 +48,7 @@ function AppRoutes() {
         <Route path="/flota" element={<FlotaPage />} />
         <Route path="/viajes" element={<ViajesPage />} />
         <Route path="/recojos" element={<RecojosPage />} />
+        <Route path="/emisor" element={<EmisorPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>{% if guias|length == 1 %}Guía {{ guias.0.numero_formateado }}{% else %}Guías de remisión{% endif %}</title>
+  <style>
+    @page { size: a4 portrait; margin: 1.1cm; }
+    body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #111; }
+    p { margin: 0 0 1pt 0; padding: 0; }
+    table { width: 100%; }
+    .guia { page-break-after: always; }
+    .guia-ultima { page-break-after: auto; }
+    .emisor { font-size: 13pt; font-weight: bold; margin-bottom: 4pt; }
+    .caja-numero { border: 1.5pt solid #111; padding: 6pt; text-align: center; }
+    .tipo { font-size: 8pt; font-weight: bold; }
+    .numero { font-size: 14pt; font-weight: bold; }
+    .seccion { font-size: 8pt; font-weight: bold; background-color: #e8e8e8; padding: 2pt 5pt; border: 0.5pt solid #999; margin-top: 5pt; }
+    .campos td { border: 0.5pt solid #999; padding: 3pt 5pt; vertical-align: top; }
+    .campos .etiqueta { font-size: 7pt; color: #555; }
+    .bienes th { border: 0.5pt solid #999; background-color: #e8e8e8; padding: 3pt; font-size: 8pt; }
+    .bienes td { border: 0.5pt solid #999; padding: 3pt; }
+    .num { text-align: right; }
+    .total td { border: 0.5pt solid #999; padding: 3pt; font-weight: bold; background-color: #f4f4f4; }
+    .firma td { border-top: 0.5pt solid #111; padding-top: 2pt; font-size: 7pt; text-align: center; }
+    .firma .hueco { border-top: none; }
+    .pie { margin-top: 8pt; font-size: 7pt; color: #666; }
+    .anulada { color: #b91c1c; font-weight: bold; font-size: 10pt; }
+    .espacio { height: 4pt; }
+  </style>
+</head>
+<body>
+{% for guia in guias %}
+  <div class="{% if forloop.last %}guia-ultima{% else %}guia{% endif %}">
+    <table>
+      <tr>
+        <td style="width: 62%; vertical-align: top;">
+          <p class="emisor">{{ guia.emisor_razon_social|default:"—" }}</p>
+          {% if guia.emisor_direccion %}<p>{{ guia.emisor_direccion }}</p>{% endif %}
+          {% if guia.emisor_registro_mtc %}<p>Registro MTC: {{ guia.emisor_registro_mtc }}</p>{% endif %}
+        </td>
+        <td class="caja-numero" style="width: 38%;">
+          <span class="tipo">RUC {{ guia.emisor_ruc|default:"—" }}</span><br />
+          <span class="tipo">GUÍA DE REMISIÓN — TRANSPORTISTA</span><br />
+          <span class="numero">{{ guia.numero_formateado }}</span>
+          {% if guia.estado == 'anulada' %}<br /><span class="anulada">ANULADA</span>{% endif %}
+        </td>
+      </tr>
+    </table>
+
+    <div class="espacio"></div>
+    <table class="campos">
+      <tr>
+        <td style="width: 33%;">
+          <p class="etiqueta">Fecha de emisión</p>
+          <p class="valor">{{ guia.fecha_emision|date:"d/m/Y" }}</p>
+        </td>
+        <td style="width: 33%;">
+          <p class="etiqueta">Fecha de traslado</p>
+          <p class="valor">{{ guia.fecha_traslado|date:"d/m/Y" }}</p>
+        </td>
+        <td>
+          <p class="etiqueta">Motivo del traslado</p>
+          <p class="valor">{{ guia.motivo_traslado|default:"—" }}</p>
+        </td>
+      </tr>
+    </table>
+
+    <div class="espacio"></div>
+    <p class="seccion">REMITENTE</p>
+    <table class="campos">
+      <tr>
+        <td style="width: 25%;">
+          <p class="etiqueta">RUC / DNI</p>
+          <p class="valor">{{ guia.remitente_documento|default:"—" }}</p>
+        </td>
+        <td>
+          <p class="etiqueta">Razón social / Nombre</p>
+          <p class="valor">{{ guia.remitente_razon_social|default:"—" }}</p>
+        </td>
+      </tr>
+    </table>
+
+    <div class="espacio"></div>
+    <p class="seccion">DESTINATARIO</p>
+    <table class="campos">
+      <tr>
+        <td style="width: 25%;">
+          <p class="etiqueta">RUC</p>
+          <p class="valor">{{ guia.destinatario_documento|default:"—" }}</p>
+        </td>
+        <td>
+          <p class="etiqueta">Razón social</p>
+          <p class="valor">{{ guia.destinatario_razon_social|default:"—" }}</p>
+        </td>
+      </tr>
+    </table>
+
+    <div class="espacio"></div>
+    <p class="seccion">TRASLADO</p>
+    <table class="campos">
+      <tr>
+        <td style="width: 50%;">
+          <p class="etiqueta">Punto de partida</p>
+          <p class="valor">{{ guia.punto_partida|default:"—" }}</p>
+        </td>
+        <td>
+          <p class="etiqueta">Punto de llegada</p>
+          <p class="valor">{{ guia.punto_llegada|default:"—" }}</p>
+        </td>
+      </tr>
+    </table>
+
+    <div class="espacio"></div>
+    <p class="seccion">VEHÍCULO Y CONDUCTOR</p>
+    <table class="campos">
+      <tr>
+        <td style="width: 22%;">
+          <p class="etiqueta">Placa</p>
+          <p class="valor">{{ guia.vehiculo_placa|default:"—" }}</p>
+        </td>
+        <td style="width: 28%;">
+          <p class="etiqueta">Marca y modelo</p>
+          <p class="valor">{{ guia.vehiculo_marca|default:"—" }}</p>
+        </td>
+        <td style="width: 28%;">
+          <p class="etiqueta">Conductor</p>
+          <p class="valor">{{ guia.conductor_nombre|default:"—" }}</p>
+        </td>
+        <td>
+          <p class="etiqueta">Licencia</p>
+          <p class="valor">{{ guia.conductor_licencia|default:"—" }}</p>
+        </td>
+      </tr>
+    </table>
+
+    <div class="espacio"></div>
+    <p class="seccion">BIENES TRANSPORTADOS</p>
+    <table class="bienes">
+      <tr>
+        <th style="width: 10%;">Ítem</th>
+        <th>Descripción</th>
+        <th style="width: 15%;">Unidad</th>
+        <th style="width: 20%;">Cantidad</th>
+      </tr>
+      {% for item in guia.items.all %}
+      <tr>
+        <td class="num">{{ forloop.counter }}</td>
+        <td>{{ item.descripcion }}</td>
+        <td>{{ item.unidad }}</td>
+        <td class="num">{{ item.cantidad|floatformat:2 }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <table class="total">
+      <tr>
+        <td style="width: 80%;">PESO TOTAL</td>
+        <td class="num">{{ guia.peso_total_kg|floatformat:2 }} KG</td>
+      </tr>
+    </table>
+
+    {% if guia.observaciones %}
+    <div class="espacio"></div>
+    <table class="campos">
+      <tr>
+        <td>
+          <p class="etiqueta">Observaciones</p>
+          <p class="valor">{{ guia.observaciones }}</p>
+        </td>
+      </tr>
+    </table>
+    {% endif %}
+
+    <table>
+      <tr><td style="height: 32pt; font-size: 1pt;">&nbsp;</td></tr>
+    </table>
+    <table class="firma">
+      <tr>
+        <td style="width: 45%;">Entregado por (remitente)</td>
+        <td class="hueco" style="width: 10%;"></td>
+        <td style="width: 45%;">Recibido por (transportista)</td>
+      </tr>
+    </table>
+    <p class="pie">
+      Documento generado por el sistema el {{ guia.creado_en|date:"d/m/Y H:i" }}.
+      Recojo #{{ guia.recojo_id }}.
+    </p>
+  </div>
+{% endfor %}
+</body>
+</html>

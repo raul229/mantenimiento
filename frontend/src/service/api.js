@@ -74,3 +74,23 @@ export const SedeService = crud("/sedes/");
 export const PersonaService = crud("/personas/");
 export const TipoResiduoService = crud("/tipos-residuo/");
 export const UsuarioService = { getAll: () => api.get("/usuarios/") };
+
+export const ConfiguracionEmisorService = {
+  get: () => api.get("/configuracion-emisor/"),
+  update: (datos) => api.put("/configuracion-emisor/", datos),
+};
+
+// Los endpoints de impresión exigen el token JWT, así que se piden como blob
+// y se muestran con una URL temporal en lugar de abrir la URL directa.
+export const GuiaService = {
+  ...crud("/guias/"),
+  emitir: (datos) => api.post("/guias/emitir/", datos),
+  anular: (id) => api.post(`/guias/${id}/anular/`),
+  previewHtml: (params) =>
+    api.get("/guias/preview/", { params, responseType: "blob" }),
+  pdf: (params) => api.get("/guias/pdf/", { params, responseType: "blob" }),
+};
+
+export function blobUrl(respuesta, tipo) {
+  return URL.createObjectURL(new Blob([respuesta.data], { type: tipo }));
+}

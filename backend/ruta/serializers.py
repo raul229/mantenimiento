@@ -9,6 +9,7 @@ from django.utils import timezone
 from .models import (
     Ciudad, Cliente, Empresa, Sede, Ruta, Viaje, Recojo, Celular, Persona,
     TipoResiduo, RecojoDetalle, ViajeGasto,
+    ConfiguracionEmisor, GuiaRemision, GuiaRemisionItem,
 )
 from .documentos import clasificar_documento
 
@@ -463,6 +464,10 @@ class RecojoSerializer(serializers.ModelSerializer):
     detalles = RecojoDetalleSerializer(many=True, read_only=True)
     viaje_ruta = serializers.CharField(source='viaje.ruta.nombre', read_only=True, default=None, allow_null=True)
     vehiculo_placa = serializers.CharField(source='viaje.vehiculo.placa', read_only=True, default=None, allow_null=True)
+    guia_id = serializers.IntegerField(source='guia.id', read_only=True, default=None, allow_null=True)
+    guia_numero = serializers.CharField(
+        source='guia.numero_formateado', read_only=True, default=None, allow_null=True,
+    )
 
     class Meta:
         model = Recojo
@@ -608,3 +613,30 @@ class ViajeSerializer(serializers.ModelSerializer):
         if sedes is not None:
             viaje.sedes.set(sedes)
         return viaje
+
+
+class ConfiguracionEmisorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConfiguracionEmisor
+        fields = '__all__'
+        read_only_fields = ('correlativo',)
+
+
+class GuiaRemisionItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GuiaRemisionItem
+        fields = ('id', 'descripcion', 'unidad', 'cantidad')
+
+
+class GuiaRemisionSerializer(serializers.ModelSerializer):
+    items = GuiaRemisionItemSerializer(many=True, read_only=True)
+    numero_formateado = serializers.CharField(read_only=True)
+    viaje = serializers.IntegerField(source='recojo.viaje_id', read_only=True, default=None, allow_null=True)
+    sede_nombre = serializers.CharField(
+        source='recojo.sede.nombre', read_only=True, default=None, allow_null=True,
+    )
+
+    class Meta:
+        model = GuiaRemision
+        fields = '__all__'
+        read_only_fields = ('recojo', 'serie', 'numero', 'fecha_emision', 'creado_en', 'creado_por')

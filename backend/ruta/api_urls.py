@@ -1,7 +1,7 @@
 from .views import (
     CiudadViewSet, ClienteViewSet, SedeViewSet, RutaViewSet, ViajeViewSet,
     RecojoViewSet, CelularViewSet, PersonaViewSet, TipoResiduoViewSet,
-    RecojoDetalleViewSet, ViajeGastoViewSet,
+    RecojoDetalleViewSet, ViajeGastoViewSet, GuiaRemisionViewSet,
 )
 
 ruta_urls = [
@@ -16,4 +16,5 @@ ruta_urls = [
     (r'tipos-residuo', TipoResiduoViewSet),
     (r'recojo-detalles', RecojoDetalleViewSet),
     (r'viaje-gastos', ViajeGastoViewSet),
+    (r'guias', GuiaRemisionViewSet),
 ]

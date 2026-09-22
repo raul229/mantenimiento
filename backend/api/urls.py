@@ -7,6 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .api_urls import router
 from .auth_views import me, usuarios
 from ruta.dashboard import DashboardView
+from ruta.views import ConfiguracionEmisorView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -15,6 +16,7 @@ urlpatterns = [
     path('api/auth/me/', me),
     path('api/usuarios/', usuarios),
     path('api/dashboard/', DashboardView.as_view()),
+    path('api/configuracion-emisor/', ConfiguracionEmisorView.as_view()),
     path('api/', include(router.urls)),
 ]
 

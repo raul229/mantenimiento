@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Plus, Search, X } from "lucide-react";
-import { ViajeService, VehiculoService, RutaService, UsuarioService, CiudadService, SedeService } from "@/service/api";
+import { FileText, Plus, Search, X } from "lucide-react";
+import { ViajeService, VehiculoService, RutaService, UsuarioService, CiudadService, SedeService, GuiaService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { DataTable } from "@/components/DataTable";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass } from "@/components/Modal";
 import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
+import { GuiaRemisionModal, avisarOmitidos } from "@/components/GuiaRemisionModal";
 import { ESTADO_VIAJE, formatKg, formatMoney, formatDate, todayISO } from "@/utils/format";
 
 const emptyViaje = {
@@ -42,6 +43,8 @@ export function ViajesPage() {
   const [form, setForm] = useState(emptyViaje);
   const [rutaForm, setRutaForm] = useState(emptyRuta);
   const [sedeToAdd, setSedeToAdd] = useState("");
+  const [guiaViaje, setGuiaViaje] = useState(null);
+  const [emitiendo, setEmitiendo] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -91,6 +94,26 @@ export function ViajesPage() {
   const selected = viajes.find((v) => v.id === selectedId) || null;
   const selectedRuta = rutas.find((r) => r.id === rutaId) || null;
   const recojoPorSede = Object.fromEntries((selected?.recojos || []).map((r) => [r.sede, r]));
+
+  // Emite las guías de todos los recojos del viaje y abre la vista previa del lote.
+  const emitirGuiasViaje = async (viajeId) => {
+    setEmitiendo(true);
+    try {
+      const { data } = await GuiaService.emitir({ viaje: viajeId });
+      if (data.nuevas) {
+        toast.success(data.nuevas === 1 ? "Guía emitida" : `${data.nuevas} guías emitidas`);
+      }
+      avisarOmitidos(data.omitidos);
+      setGuiaViaje(viajeId);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "No se pudieron emitir las guías", {
+        duration: 7000,
+      });
+    } finally {
+      setEmitiendo(false);
+    }
+  };
 
   const saveViaje = async () => {
     if (!form.vehiculo || !form.conductor) {
@@ -343,6 +366,20 @@ export function ViajesPage() {
             ))}
             <Row label="Total" value={formatMoney(selected.costo_total)} />
             {!gastos.length && <p className="text-sm text-muted">Sin gastos registrados</p>}
+
+            <button
+              type="button"
+              disabled={emitiendo || !selected.paradas_hechas}
+              onClick={() => emitirGuiasViaje(selected.id)}
+              className="btn btn-outline mt-5 w-full"
+            >
+              <FileText size={16} /> Guías de toda la ruta
+            </button>
+            {!selected.paradas_hechas && (
+              <p className="mt-2 text-xs text-muted">
+                Aún no hay recojos registrados en este viaje.
+              </p>
+            )}
           </DetailPanel>
         )}
 
@@ -445,6 +482,11 @@ export function ViajesPage() {
         open={modalCiudad}
         onClose={() => setModalCiudad(false)}
         onCreated={(nueva) => setCiudades((prev) => mergeCiudad(prev, nueva))}
+      />
+      <GuiaRemisionModal
+        open={!!guiaViaje}
+        viaje={guiaViaje}
+        onClose={() => setGuiaViaje(null)}
       />
     </>
   );

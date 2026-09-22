@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
 from mantenimiento.models import Vehiculo
 
@@ -215,3 +215,105 @@ class ViajeGasto(models.Model):
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
     monto = models.DecimalField(max_digits=10, decimal_places=2)
     descripcion = models.CharField(max_length=120, blank=True, default='')
+
+
+class ConfiguracionEmisor(models.Model):
+    """Datos de la empresa transportista y correlativo de sus guías. Registro único."""
+
+    ruc = models.CharField(max_length=11, blank=True, default='')
+    razon_social = models.CharField(max_length=120, blank=True, default='')
+    nombre_comercial = models.CharField(max_length=120, blank=True, default='')
+    direccion = models.CharField(max_length=160, blank=True, default='')
+    registro_mtc = models.CharField(max_length=40, blank=True, default='')
+    telefono = models.CharField(max_length=40, blank=True, default='')
+    serie_guia = models.CharField(max_length=8, default='T001')
+    correlativo = models.PositiveIntegerField(default=0)
+    destinatario_documento = models.CharField(max_length=11, blank=True, default='')
+    destinatario_razon_social = models.CharField(max_length=120, blank=True, default='')
+    punto_llegada = models.CharField(max_length=160, blank=True, default='')
+    motivo_traslado = models.CharField(max_length=80, default='Traslado de residuos sólidos')
+
+    @classmethod
+    def vigente(cls):
+        config = cls.objects.first()
+        if config is None:
+            config = cls.objects.create()
+        return config
+
+    def reservar_numero(self):
+        """Avanza el correlativo bajo bloqueo y devuelve (serie, numero)."""
+        with transaction.atomic():
+            actual = ConfiguracionEmisor.objects.select_for_update().get(pk=self.pk)
+            actual.correlativo += 1
+            actual.save(update_fields=['correlativo'])
+            self.correlativo = actual.correlativo
+            return actual.serie_guia, actual.correlativo
+
+    def __str__(self):
+        return self.razon_social or 'Configuración del emisor'
+
+
+class GuiaRemision(models.Model):
+    """Guía de remisión transportista. Guarda copia de los datos al momento de emitir."""
+
+    ESTADO_CHOICES = (
+        ('emitida', 'Emitida'),
+        ('anulada', 'Anulada'),
+    )
+
+    recojo = models.OneToOneField(Recojo, on_delete=models.CASCADE, related_name='guia')
+    serie = models.CharField(max_length=8)
+    numero = models.PositiveIntegerField()
+    fecha_emision = models.DateField()
+    fecha_traslado = models.DateField()
+    motivo_traslado = models.CharField(max_length=80, default='Traslado de residuos sólidos')
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default='emitida')
+
+    emisor_ruc = models.CharField(max_length=11, blank=True, default='')
+    emisor_razon_social = models.CharField(max_length=120, blank=True, default='')
+    emisor_direccion = models.CharField(max_length=160, blank=True, default='')
+    emisor_registro_mtc = models.CharField(max_length=40, blank=True, default='')
+
+    remitente_documento = models.CharField(max_length=11, blank=True, default='')
+    remitente_razon_social = models.CharField(max_length=120, blank=True, default='')
+    destinatario_documento = models.CharField(max_length=11, blank=True, default='')
+    destinatario_razon_social = models.CharField(max_length=120, blank=True, default='')
+
+    punto_partida = models.CharField(max_length=160, blank=True, default='')
+    punto_llegada = models.CharField(max_length=160, blank=True, default='')
+
+    vehiculo_placa = models.CharField(max_length=50, blank=True, default='')
+    vehiculo_marca = models.CharField(max_length=100, blank=True, default='')
+    conductor_nombre = models.CharField(max_length=120, blank=True, default='')
+    conductor_documento = models.CharField(max_length=15, blank=True, default='')
+    conductor_licencia = models.CharField(max_length=20, blank=True, default='')
+
+    peso_total_kg = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    observaciones = models.TextField(blank=True, default='')
+    creado_en = models.DateTimeField(auto_now_add=True)
+    creado_por = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='guias_emitidas'
+    )
+
+    class Meta:
+        ordering = ['-fecha_emision', '-numero']
+        constraints = [
+            models.UniqueConstraint(fields=['serie', 'numero'], name='unique_guia_serie_numero'),
+        ]
+
+    @property
+    def numero_formateado(self):
+        return f'{self.serie}-{self.numero:08d}'
+
+    def __str__(self):
+        return self.numero_formateado
+
+
+class GuiaRemisionItem(models.Model):
+    guia = models.ForeignKey(GuiaRemision, on_delete=models.CASCADE, related_name='items')
+    descripcion = models.CharField(max_length=120)
+    unidad = models.CharField(max_length=10, default='KG')
+    cantidad = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def __str__(self):
+        return f'{self.cantidad} {self.unidad} · {self.descripcion}'

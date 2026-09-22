@@ -5,6 +5,7 @@ import {
   Route,
   Recycle,
   Truck,
+  FileText,
   ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -15,6 +16,7 @@ const items = [
   { to: "/viajes", label: "Rutas y viajes", icon: Route },
   { to: "/recojos", label: "Recojos", icon: Recycle },
   { to: "/flota", label: "Vehículos", icon: Truck },
+  { to: "/emisor", label: "Datos de emisión", icon: FileText },
 ];
 
 export function Sidebar() {

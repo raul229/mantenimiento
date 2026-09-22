@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Plus, Search } from "lucide-react";
-import { RecojoService, ViajeService, CiudadService } from "@/service/api";
+import { FileText, Plus, Search } from "lucide-react";
+import { RecojoService, ViajeService, CiudadService, GuiaService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { DataTable } from "@/components/DataTable";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass } from "@/components/Modal";
 import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
+import { GuiaRemisionModal, avisarOmitidos } from "@/components/GuiaRemisionModal";
 import { ESTADO_RECOJO, formatDate, formatTime, formatKg, formatKgPrecise, monthISO } from "@/utils/format";
 
 const VIAJE_EN_PROCESO = new Set(["programado", "en curso"]);
@@ -26,6 +27,9 @@ export function RecojosPage() {
   const [modalCiudad, setModalCiudad] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pesoEdit, setPesoEdit] = useState("");
+  const [seleccion, setSeleccion] = useState([]);
+  const [guiaIds, setGuiaIds] = useState(null);
+  const [emitiendo, setEmitiendo] = useState(false);
   const [form, setForm] = useState({
     viaje: "",
     sede: "",
@@ -86,6 +90,9 @@ export function RecojosPage() {
     });
   }, [recojos, fecha, estado, ciudad, q, ciudades]);
 
+  const todosSeleccionados =
+    filtered.length > 0 && filtered.every((r) => seleccion.includes(r.id));
+
   const mes = monthISO();
   const kpis = useMemo(() => {
     const delMes = recojos.filter((r) => (r.fecha || "").startsWith(mes));
@@ -142,7 +149,57 @@ export function RecojosPage() {
     }
   };
 
+  const toggleSeleccion = (id) =>
+    setSeleccion((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const toggleTodos = () =>
+    setSeleccion(todosSeleccionados ? [] : filtered.map((r) => r.id));
+
+  // Emitir es idempotente: si el recojo ya tiene guía devuelve la existente.
+  const emitirGuias = async (recojoIds) => {
+    if (!recojoIds.length) return;
+    setEmitiendo(true);
+    try {
+      const { data } = await GuiaService.emitir({ recojos: recojoIds });
+      if (data.nuevas) {
+        toast.success(data.nuevas === 1 ? "Guía emitida" : `${data.nuevas} guías emitidas`);
+      }
+      avisarOmitidos(data.omitidos);
+      setGuiaIds(data.guias.map((g) => g.id));
+      setSeleccion([]);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "No se pudieron emitir las guías", {
+        duration: 7000,
+      });
+    } finally {
+      setEmitiendo(false);
+    }
+  };
+
   const columns = [
+    {
+      key: "seleccion",
+      headerRender: () => (
+        <input
+          type="checkbox"
+          className="checkbox checkbox-sm"
+          aria-label="Seleccionar todos"
+          checked={todosSeleccionados}
+          onChange={toggleTodos}
+        />
+      ),
+      render: (r) => (
+        <input
+          type="checkbox"
+          className="checkbox checkbox-sm"
+          aria-label={`Seleccionar recojo ${r.id}`}
+          checked={seleccion.includes(r.id)}
+          onClick={(e) => e.stopPropagation()}
+          onChange={() => toggleSeleccion(r.id)}
+        />
+      ),
+    },
     { header: "Fecha", render: (r) => formatDate(r.fecha) },
     { header: "Hora", render: (r) => formatTime(r.hora) },
     { header: "Cliente", render: (r) => r.cliente_nombre || "—" },
@@ -150,6 +207,15 @@ export function RecojosPage() {
     { header: "Viaje", render: (r) => r.viaje_ruta || (r.viaje ? `#${r.viaje}` : "—") },
     { header: "Kg", render: (r) => formatKgPrecise(r.peso_kg) },
     { header: "Estado", render: (r) => <StatusBadge map={ESTADO_RECOJO} value={r.estado} /> },
+    {
+      header: "Guía",
+      render: (r) =>
+        r.guia_numero ? (
+          <span className="font-mono text-xs">{r.guia_numero}</span>
+        ) : (
+          <span className="text-muted">—</span>
+        ),
+    },
   ];
 
   return (
@@ -176,7 +242,18 @@ export function RecojosPage() {
               <Search size={16} className="absolute left-3 top-2.5 text-muted" />
               <input className={`${filterClass} w-52 pl-9`} placeholder="Cliente, sede o ruta" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
-            <button type="button" onClick={openNew} className="btn btn-primary ml-auto">
+            <button
+              type="button"
+              disabled={!seleccion.length || emitiendo}
+              onClick={() => emitirGuias(seleccion)}
+              className="btn btn-outline ml-auto"
+            >
+              <FileText size={16} />
+              {seleccion.length > 1
+                ? `Guías de ${seleccion.length} recojos`
+                : "Guía de remisión"}
+            </button>
+            <button type="button" onClick={openNew} className="btn btn-primary">
               <Plus size={16} /> Nuevo recojo
             </button>
           </div>
@@ -210,6 +287,7 @@ export function RecojosPage() {
             <Row label="Dirección" value={selected.sede_direccion || "—"} />
             <Row label="Viaje" value={selected.viaje_ruta || "—"} />
             <Row label="Vehículo" value={selected.vehiculo_placa || "—"} />
+            <Row label="Guía" value={selected.guia_numero || "Sin emitir"} />
             <fieldset className="fieldset mt-4 p-0">
               <legend className="fieldset-legend">Kilogramos</legend>
               <input
@@ -226,6 +304,15 @@ export function RecojosPage() {
             )}
             <button type="button" disabled={saving} onClick={savePeso} className="btn btn-primary mt-4 w-full">
               Guardar kg
+            </button>
+            <button
+              type="button"
+              disabled={emitiendo}
+              onClick={() => emitirGuias([selected.id])}
+              className="btn btn-outline mt-2 w-full"
+            >
+              <FileText size={16} />
+              {selected.guia_numero ? "Ver guía de remisión" : "Emitir guía de remisión"}
             </button>
           </DetailPanel>
         )}
@@ -274,6 +361,11 @@ export function RecojosPage() {
         open={modalCiudad}
         onClose={() => setModalCiudad(false)}
         onCreated={(nueva) => setCiudades((prev) => mergeCiudad(prev, nueva))}
+      />
+      <GuiaRemisionModal
+        open={!!guiaIds}
+        ids={guiaIds || []}
+        onClose={() => setGuiaIds(null)}
       />
     </>
   );

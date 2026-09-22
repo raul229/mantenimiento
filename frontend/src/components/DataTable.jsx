@@ -13,7 +13,7 @@ export function DataTable({ columns, data, loading, onRowClick, selectedId, empt
         <thead>
           <tr>
             {columns.map((col) => (
-              <th key={col.header}>{col.header}</th>
+              <th key={col.key || col.header}>{col.headerRender ? col.headerRender() : col.header}</th>
             ))}
           </tr>
         </thead>
@@ -30,7 +30,7 @@ export function DataTable({ columns, data, loading, onRowClick, selectedId, empt
               className={`${onRowClick ? "cursor-pointer hover:bg-base-200" : ""} ${selectedId === row.id ? "bg-primary/10" : ""}`}
             >
               {columns.map((col) => (
-                <td key={col.header}>
+                <td key={col.key || col.header}>
                   {col.render ? col.render(row) : row[col.accessor]}
                 </td>
               ))}
