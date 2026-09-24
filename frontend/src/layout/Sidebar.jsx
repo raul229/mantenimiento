@@ -6,21 +6,25 @@ import {
   Recycle,
   Truck,
   FileText,
+  Shield,
   ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { ROLES } from "@/utils/roles";
 
 const items = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/clientes", label: "Clientes", icon: Users },
-  { to: "/viajes", label: "Rutas y viajes", icon: Route },
-  { to: "/recojos", label: "Recojos", icon: Recycle },
-  { to: "/flota", label: "Vehículos", icon: Truck },
-  { to: "/emisor", label: "Datos de emisión", icon: FileText },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, modulo: "dashboard" },
+  { to: "/clientes", label: "Clientes", icon: Users, modulo: "clientes" },
+  { to: "/viajes", label: "Rutas y viajes", icon: Route, modulo: "viajes" },
+  { to: "/recojos", label: "Recojos", icon: Recycle, modulo: "recojos" },
+  { to: "/flota", label: "Vehículos", icon: Truck, modulo: "flota" },
+  { to: "/emisor", label: "Datos de emisión", icon: FileText, modulo: "emisor" },
+  { to: "/usuarios", label: "Usuarios", icon: Shield, modulo: "usuarios" },
 ];
 
 export function Sidebar() {
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
+  const visibles = items.filter((item) => can(item.modulo));
 
   return (
     <aside className="flex w-64 shrink-0 flex-col bg-sidebar text-white">
@@ -34,7 +38,7 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="mt-2 flex-1 space-y-1 px-3">
-        {items.map((item) => (
+        {visibles.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -62,7 +66,7 @@ export function Sidebar() {
             </div>
             <div>
               <p className="text-sm font-medium">{user?.nombre || user?.username}</p>
-              <p className="text-xs text-white/50">Cerrar sesión</p>
+              <p className="text-xs text-white/50">{ROLES[user?.rol]?.label || "Cerrar sesión"}</p>
             </div>
           </div>
           <ChevronDown size={16} className="text-white/50" />

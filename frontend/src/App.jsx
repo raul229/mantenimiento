@@ -8,13 +8,15 @@ import { FlotaPage } from "@/pages/FlotaPage";
 import { ViajesPage } from "@/pages/ViajesPage";
 import { RecojosPage } from "@/pages/RecojosPage";
 import { EmisorPage } from "@/pages/EmisorPage";
+import { UsuariosPage } from "@/pages/UsuariosPage";
 
-function Guard({ children }) {
-  const { user, ready } = useAuth();
+function Guard({ children, modulo }) {
+  const { user, ready, can } = useAuth();
   if (!ready) {
     return <div className="flex min-h-screen items-center justify-center text-muted">Cargando…</div>;
   }
   if (!user) return <Navigate to="/login" replace />;
+  if (modulo && !can(modulo)) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -44,11 +46,12 @@ function AppRoutes() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/clientes" element={<ClientesPage />} />
-        <Route path="/flota" element={<FlotaPage />} />
-        <Route path="/viajes" element={<ViajesPage />} />
-        <Route path="/recojos" element={<RecojosPage />} />
-        <Route path="/emisor" element={<EmisorPage />} />
+        <Route path="/clientes" element={<Guard modulo="clientes"><ClientesPage /></Guard>} />
+        <Route path="/flota" element={<Guard modulo="flota"><FlotaPage /></Guard>} />
+        <Route path="/viajes" element={<Guard modulo="viajes"><ViajesPage /></Guard>} />
+        <Route path="/recojos" element={<Guard modulo="recojos"><RecojosPage /></Guard>} />
+        <Route path="/emisor" element={<Guard modulo="emisor"><EmisorPage /></Guard>} />
+        <Route path="/usuarios" element={<Guard modulo="usuarios"><UsuariosPage /></Guard>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

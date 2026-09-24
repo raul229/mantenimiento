@@ -1,5 +1,6 @@
 import { Bell } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { ROLES } from "@/utils/roles";
 
 export function Topbar({ title, children }) {
   const { user } = useAuth();
@@ -22,7 +23,10 @@ export function Topbar({ title, children }) {
               {(user?.nombre || "U").slice(0, 1).toUpperCase()}
             </div>
           </div>
-          <span className="hidden text-sm font-medium sm:block">{user?.nombre || user?.username}</span>
+          <div className="hidden sm:block">
+            <p className="text-sm font-medium leading-none">{user?.nombre || user?.username}</p>
+            <p className="text-xs text-muted">{ROLES[user?.rol]?.label}</p>
+          </div>
         </div>
       </div>
     </header>

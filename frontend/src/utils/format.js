@@ -8,6 +8,11 @@ export function formatKgPrecise(value) {
   return `${n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`;
 }
 
+export function formatKm(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  return `${Number(value).toLocaleString("es-PE")} km`;
+}
+
 export function formatMoney(value) {
   const n = Number(value || 0);
   return `S/ ${n.toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;

@@ -9,9 +9,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ESTADO_VIAJE, ESTADO_FLOTA, formatKg, formatMoney, monthISO } from "@/utils/format";
 import { inputClass } from "@/components/Modal";
 import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
+import { useAuth } from "@/context/AuthContext";
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const [mes, setMes] = useState(monthISO());
   const [ciudad, setCiudad] = useState("");
   const [ciudades, setCiudades] = useState([]);
@@ -55,7 +57,7 @@ export function DashboardPage() {
           onChange={setCiudad}
           ciudades={ciudades}
           placeholder="Todas las ciudades"
-          onNueva={() => setModalCiudad(true)}
+          onNueva={can("clientes") ? () => setModalCiudad(true) : undefined}
         />
         <input type="month" className={`${inputClass} w-40`} value={mes} onChange={(e) => setMes(e.target.value)} />
       </Topbar>
@@ -73,12 +75,14 @@ export function DashboardPage() {
             hint={`${d.viajes_en_curso ?? 0} en proceso`}
             icon={<Truck size={18} />}
           />
+          {can("clientes") && (
           <KpiCard
             title="Clientes activos"
             value={d.clientes_activos ?? 0}
             hint={`${d.clientes_publicos ?? 0} públicos / ${d.clientes_privados ?? 0} privados`}
             icon={<Users size={18} />}
           />
+          )}
           <KpiCard
             title="Caja chica"
             value={formatMoney(d.caja_chica)}
@@ -177,6 +181,7 @@ export function DashboardPage() {
               </div>
             </div>
           </div>
+          {can("flota") && (
           <div className="card bg-base-100 shadow-sm">
             <div className="card-body p-5">
               <div className="mb-3 flex items-center justify-between">
@@ -212,6 +217,7 @@ export function DashboardPage() {
               </ul>
             </div>
           </div>
+          )}
         </div>
       </div>
       <NuevaCiudadModal
