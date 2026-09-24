@@ -7,6 +7,7 @@ CATALOGO_MODULOS = [
     {'id': 'clientes', 'label': 'Clientes', 'escribe': True},
     {'id': 'viajes', 'label': 'Rutas y viajes', 'escribe': True},
     {'id': 'recojos', 'label': 'Recojos', 'escribe': True},
+    {'id': 'gastos', 'label': 'Caja y gastos', 'escribe': True},
     {'id': 'flota', 'label': 'Vehículos', 'escribe': True},
     {'id': 'emisor', 'label': 'Datos de emisión', 'escribe': True},
     {'id': 'guias', 'label': 'Guías de remisión', 'escribe': True},
@@ -42,6 +43,8 @@ class HasModulo(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         if request.method == 'DELETE':
+            if getattr(view, 'escribir_incluye_borrar', False):
+                return nivel in PermisoRol.NIVELES_ESCRITURA
             return nivel == PermisoRol.ELIMINAR
         if nivel in PermisoRol.NIVELES_ESCRITURA:
             return True

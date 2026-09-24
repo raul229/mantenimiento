@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { FileText, Plus, Search, X } from "lucide-react";
+import { FileText, Plus, Search, Wallet, X } from "lucide-react";
 import { ViajeService, VehiculoService, RutaService, UsuarioService, CiudadService, SedeService, GuiaService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { DataTable } from "@/components/DataTable";
@@ -25,6 +26,7 @@ const emptyRuta = { nombre: "", descripcion: "", sedes: [] };
 
 export function ViajesPage() {
   const { canWrite, can } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState("viajes");
   const [viajes, setViajes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
@@ -261,7 +263,8 @@ export function ViajesPage() {
   ];
 
   const sedesDisponiblesViaje = sedes.filter((s) => !(selected?.sedes_data || []).some((x) => x.id === s.id));
-  const gastos = selected?.gastos || [];
+  const caja = selected?.caja || null;
+  const gastos = caja?.movimientos?.filter((m) => m.tipo === "gasto") || selected?.gastos || [];
 
   return (
     <>
@@ -441,12 +444,23 @@ export function ViajesPage() {
             </div>
             )}
 
-            <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Costos del viaje</h3>
-            {gastos.map((g) => (
-              <Row key={g.id} label={g.tipo.replace("_", " ")} value={formatMoney(g.monto)} />
+            <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Caja chica</h3>
+            <Row label="Fondo" value={formatMoney(caja?.fondo)} />
+            <Row label="Gastos" value={formatMoney(caja?.gastado ?? selected.costo_total)} />
+            <Row label="Saldo" value={formatMoney(caja?.saldo)} />
+            {gastos.slice(0, 4).map((g) => (
+              <Row key={g.id} label={g.categoria_label || g.tipo?.replace("_", " ")} value={formatMoney(g.monto)} />
             ))}
-            <Row label="Total" value={formatMoney(selected.costo_total)} />
             {!gastos.length && <p className="text-sm text-muted">Sin gastos registrados</p>}
+            {can("gastos") && (
+              <button
+                type="button"
+                className="btn btn-outline mt-3 w-full"
+                onClick={() => navigate(`/gastos?viaje=${selected.id}`)}
+              >
+                <Wallet size={16} /> Ir a caja del viaje
+              </button>
+            )}
 
             {can("guias") && (
             <button

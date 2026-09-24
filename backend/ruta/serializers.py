@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from .models import (
     Ciudad, Cliente, Empresa, Sede, Ruta, Viaje, Recojo, Celular, Persona,
-    TipoResiduo, RecojoDetalle, ViajeGasto,
+    TipoResiduo, RecojoDetalle, ViajeGasto, CajaViaje, CajaMovimiento, CategoriaGasto,
     ConfiguracionEmisor, GuiaRemision, GuiaRemisionItem,
 )
 from .documentos import clasificar_documento
@@ -426,6 +426,106 @@ class ViajeGastoSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class CategoriaGastoSerializer(serializers.ModelSerializer):
+    gastos_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CategoriaGasto
+        fields = ('id', 'nombre', 'orden', 'gastos_count')
+
+    def get_gastos_count(self, obj):
+        return getattr(obj, 'gastos_count', 0)
+
+    def validate_nombre(self, value):
+        nombre = (value or '').strip()
+        if not nombre:
+            raise serializers.ValidationError('Indica el nombre.')
+        qs = CategoriaGasto.objects.filter(nombre__iexact=nombre)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('Ya existe esa categoría.')
+        return nombre
+
+
+class CajaMovimientoSerializer(serializers.ModelSerializer):
+    tipo_label = serializers.CharField(source='get_tipo_display', read_only=True)
+    categoria_label = serializers.SerializerMethodField()
+    creado_por_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CajaMovimiento
+        fields = (
+            'id', 'tipo', 'tipo_label', 'categoria', 'categoria_label',
+            'monto', 'descripcion', 'creado_por', 'creado_por_nombre', 'creado_en',
+        )
+
+    def get_categoria_label(self, obj):
+        return obj.categoria.nombre if obj.categoria_id else None
+
+    def get_creado_por_nombre(self, obj):
+        if not obj.creado_por:
+            return None
+        return obj.creado_por.get_full_name() or obj.creado_por.username
+
+
+class CajaViajeSerializer(serializers.ModelSerializer):
+    movimientos = CajaMovimientoSerializer(many=True, read_only=True)
+    asignado = serializers.SerializerMethodField()
+    aumentos = serializers.SerializerMethodField()
+    fondo = serializers.SerializerMethodField()
+    gastado = serializers.SerializerMethodField()
+    saldo = serializers.SerializerMethodField()
+    cerrado_por_nombre = serializers.SerializerMethodField()
+    viaje = serializers.PrimaryKeyRelatedField(read_only=True)
+    viaje_ruta = serializers.CharField(source='viaje.ruta.nombre', read_only=True, default=None, allow_null=True)
+    vehiculo_placa = serializers.CharField(source='viaje.vehiculo.placa', read_only=True, default=None, allow_null=True)
+    conductor_nombre = serializers.SerializerMethodField()
+    fecha_viaje = serializers.DateField(source='viaje.fecha_inicio', read_only=True)
+    estado_viaje = serializers.CharField(source='viaje.estado', read_only=True)
+
+    class Meta:
+        model = CajaViaje
+        fields = (
+            'id', 'viaje', 'estado', 'asignado', 'aumentos', 'fondo', 'gastado', 'saldo',
+            'saldo_devuelto', 'observacion_cierre', 'cerrado_en', 'cerrado_por',
+            'cerrado_por_nombre', 'movimientos', 'viaje_ruta', 'vehiculo_placa',
+            'conductor_nombre', 'fecha_viaje', 'estado_viaje',
+        )
+
+    def _nums(self, obj):
+        asignado, aumentos, gastado = obj._totales()
+        return float(asignado), float(aumentos), float(gastado)
+
+    def get_asignado(self, obj):
+        return self._nums(obj)[0]
+
+    def get_aumentos(self, obj):
+        return self._nums(obj)[1]
+
+    def get_fondo(self, obj):
+        a, u, _ = self._nums(obj)
+        return a + u
+
+    def get_gastado(self, obj):
+        return self._nums(obj)[2]
+
+    def get_saldo(self, obj):
+        a, u, g = self._nums(obj)
+        return a + u - g
+
+    def get_cerrado_por_nombre(self, obj):
+        if not obj.cerrado_por:
+            return None
+        return obj.cerrado_por.get_full_name() or obj.cerrado_por.username
+
+    def get_conductor_nombre(self, obj):
+        user = obj.viaje.conductor
+        if not user:
+            return None
+        return user.get_full_name() or user.username
+
+
 def _sync_estado_viaje(viaje):
     """Programado sin recojos, en curso con sedes pendientes, completado al cerrar todas."""
     if not viaje or viaje.estado == 'cancelado':
@@ -518,6 +618,7 @@ class ViajeSerializer(serializers.ModelSerializer):
     sedes_data = SedeMiniSerializer(source='sedes', many=True, read_only=True)
     recojos = RecojoSerializer(many=True, read_only=True)
     gastos = ViajeGastoSerializer(many=True, read_only=True)
+    caja = serializers.SerializerMethodField()
     kg_total = serializers.SerializerMethodField()
     ciudad = serializers.SerializerMethodField()
     paradas_total = serializers.SerializerMethodField()
@@ -574,7 +675,16 @@ class ViajeSerializer(serializers.ModelSerializer):
             return 0
         return obj.recojos.filter(sede_id__in=sede_ids).values('sede_id').distinct().count()
 
+    def get_caja(self, obj):
+        caja = getattr(obj, 'caja', None)
+        if caja is None:
+            return None
+        return CajaViajeSerializer(caja).data
+
     def get_costo_total(self, obj):
+        caja = getattr(obj, 'caja', None)
+        if caja is not None:
+            return float(caja.gastado)
         total = obj.gastos.aggregate(s=Sum('monto'))['s']
         return float(total or 0)
 

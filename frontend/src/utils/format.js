@@ -15,7 +15,7 @@ export function formatKm(value) {
 
 export function formatMoney(value) {
   const n = Number(value || 0);
-  return `S/ ${n.toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return `S/ ${n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function formatDate(value) {
@@ -63,6 +63,12 @@ export function clasificarDocumento(raw) {
 export const NATURALEZA_CLIENTE = {
   empresa: { label: "Empresa", className: "badge-info" },
   persona: { label: "Persona", className: "badge-secondary" },
+};
+
+export const ESTADO_CAJA = {
+  sin_fondo: { label: "Sin fondo", className: "badge-ghost" },
+  abierta: { label: "Abierta", className: "badge-warning" },
+  cerrada: { label: "Cerrada", className: "badge-success" },
 };
 
 export const ESTADO_RECOJO = {

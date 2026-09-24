@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from mantenimiento.models import Vehiculo
@@ -259,6 +261,105 @@ class ViajeGasto(models.Model):
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
     monto = models.DecimalField(max_digits=10, decimal_places=2)
     descripcion = models.CharField(max_length=120, blank=True, default='')
+
+
+class CajaViaje(models.Model):
+    ABIERTA = 'abierta'
+    CERRADA = 'cerrada'
+    ESTADO_CHOICES = (
+        (ABIERTA, 'Abierta'),
+        (CERRADA, 'Cerrada'),
+    )
+
+    viaje = models.OneToOneField(Viaje, on_delete=models.CASCADE, related_name='caja')
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default=ABIERTA)
+    cerrado_en = models.DateTimeField(null=True, blank=True)
+    cerrado_por = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='cajas_cerradas',
+    )
+    observacion_cierre = models.TextField(blank=True, default='')
+    saldo_devuelto = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    def __str__(self):
+        return f'Caja viaje #{self.viaje_id}'
+
+    def _totales(self):
+        asignado = aumentos = gastado = Decimal('0')
+        for mov in self.movimientos.all():
+            monto = mov.monto or Decimal('0')
+            if mov.tipo == CajaMovimiento.ASIGNACION:
+                asignado += monto
+            elif mov.tipo == CajaMovimiento.AUMENTO:
+                aumentos += monto
+            elif mov.tipo == CajaMovimiento.GASTO:
+                gastado += monto
+        return asignado, aumentos, gastado
+
+    @property
+    def asignado(self):
+        asignado, _, _ = self._totales()
+        return asignado
+
+    @property
+    def aumentos(self):
+        _, aumentos, _ = self._totales()
+        return aumentos
+
+    @property
+    def fondo(self):
+        asignado, aumentos, _ = self._totales()
+        return asignado + aumentos
+
+    @property
+    def gastado(self):
+        _, _, gastado = self._totales()
+        return gastado
+
+    @property
+    def saldo(self):
+        asignado, aumentos, gastado = self._totales()
+        return asignado + aumentos - gastado
+
+
+class CategoriaGasto(models.Model):
+    nombre = models.CharField(max_length=60, unique=True)
+    orden = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['orden', 'nombre']
+
+    def __str__(self):
+        return self.nombre
+
+
+class CajaMovimiento(models.Model):
+    ASIGNACION = 'asignacion'
+    AUMENTO = 'aumento'
+    GASTO = 'gasto'
+    TIPO_CHOICES = (
+        (ASIGNACION, 'Asignación'),
+        (AUMENTO, 'Aumento'),
+        (GASTO, 'Gasto'),
+    )
+
+    caja = models.ForeignKey(CajaViaje, on_delete=models.CASCADE, related_name='movimientos')
+    tipo = models.CharField(max_length=12, choices=TIPO_CHOICES)
+    categoria = models.ForeignKey(
+        CategoriaGasto, on_delete=models.SET_NULL, null=True, blank=True, related_name='movimientos',
+    )
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    descripcion = models.CharField(max_length=160, blank=True, default='')
+    creado_por = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='movimientos_caja',
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['creado_en', 'id']
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} S/ {self.monto}'
+
 
 
 class ConfiguracionEmisor(models.Model):

@@ -2,19 +2,21 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import Q
+from django.core.exceptions import ValidationError
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from cuentas.models import solo_asignados
+from . import caja as caja_service
 from .models import (
     Ciudad, Cliente, Sede, Ruta, Viaje, Recojo, Celular, Persona,
-    TipoResiduo, RecojoDetalle, ViajeGasto,
+    TipoResiduo, RecojoDetalle, ViajeGasto, CajaViaje, CajaMovimiento, CategoriaGasto,
     ConfiguracionEmisor, GuiaRemision,
 )
 from .serializers import (
     CiudadSerializer, ClienteSerializer, SedeSerializer, RutaSerializer,
     ViajeSerializer, RecojoSerializer, CelularSerializer, PersonaSerializer,
     TipoResiduoSerializer, RecojoDetalleSerializer, ViajeGastoSerializer,
-    ConfiguracionEmisorSerializer, GuiaRemisionSerializer,
+    CajaViajeSerializer, CategoriaGastoSerializer, ConfiguracionEmisorSerializer, GuiaRemisionSerializer,
 )
 from . import guias as guias_service
 
@@ -80,6 +82,9 @@ class ViajeViewSet(viewsets.ModelViewSet):
         'recojos__sede__ciudad',
         'recojos__guia',
         'gastos',
+        'caja__movimientos__creado_por',
+        'caja__movimientos__categoria',
+        'caja__cerrado_por',
         'ruta__sedes',
     ).all()
     serializer_class = ViajeSerializer
@@ -143,9 +148,175 @@ class RecojoDetalleViewSet(viewsets.ModelViewSet):
 
 
 class ViajeGastoViewSet(viewsets.ModelViewSet):
-    modulo = 'viajes'
+    modulo = 'gastos'
     queryset = ViajeGasto.objects.all()
     serializer_class = ViajeGastoSerializer
+
+
+class CategoriaGastoViewSet(viewsets.ModelViewSet):
+    modulo = 'gastos'
+    escribir_incluye_borrar = True
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+    queryset = CategoriaGasto.objects.all()
+    serializer_class = CategoriaGastoSerializer
+
+    def get_queryset(self):
+        return CategoriaGasto.objects.annotate(
+            gastos_count=Count('movimientos', filter=Q(movimientos__tipo=CajaMovimiento.GASTO)),
+        )
+
+    def create(self, request, *args, **kwargs):
+        if not caja_service.puede_asignar_caja(request.user):
+            return Response({'detail': 'No puedes administrar categorías.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not caja_service.puede_asignar_caja(request.user):
+            return Response({'detail': 'No puedes administrar categorías.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
+
+def _caja_fresca(caja):
+    return CajaViaje.objects.select_related(
+        'viaje', 'viaje__ruta', 'viaje__vehiculo', 'viaje__conductor', 'cerrado_por',
+    ).prefetch_related('movimientos__creado_por', 'movimientos__categoria').get(pk=caja.pk)
+
+
+def _error_caja(exc):
+    if getattr(exc, 'message_dict', None):
+        return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+    mensajes = getattr(exc, 'messages', None) or [str(exc)]
+    return Response({'detail': mensajes[0]}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CajaViajeViewSet(viewsets.ReadOnlyModelViewSet):
+    modulo = 'gastos'
+    serializer_class = CajaViajeSerializer
+    queryset = CajaViaje.objects.select_related(
+        'viaje', 'viaje__ruta', 'viaje__vehiculo', 'viaje__conductor', 'cerrado_por',
+    ).prefetch_related('movimientos__creado_por', 'movimientos__categoria').order_by('-viaje__fecha_inicio', '-id')
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if solo_asignados(self.request.user):
+            qs = qs.filter(viaje__conductor=self.request.user)
+        viaje = self.request.query_params.get('viaje')
+        estado = self.request.query_params.get('estado')
+        if viaje:
+            qs = qs.filter(viaje_id=viaje)
+        if estado:
+            qs = qs.filter(estado=estado)
+        return qs
+
+    @action(detail=False, methods=['post'])
+    def asignar(self, request):
+        if not caja_service.puede_asignar_caja(request.user):
+            return Response(
+                {'detail': 'Solo un encargado puede asignar fondo a un viaje.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        viaje_id = request.data.get('viaje')
+        try:
+            viaje = Viaje.objects.get(pk=viaje_id)
+        except (Viaje.DoesNotExist, ValueError, TypeError):
+            return Response({'viaje': 'Selecciona un viaje.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            caja_service.asignar(
+                viaje,
+                request.data.get('monto'),
+                request.user,
+                request.data.get('descripcion') or '',
+            )
+        except ValidationError as exc:
+            return _error_caja(exc)
+        return Response(self.get_serializer(_caja_fresca(caja_service.caja_de(viaje))).data, status=status.HTTP_201_CREATED)
+
+    def _caja_rendicion(self, request):
+        caja = self.get_object()
+        if not caja_service.puede_rendir_caja(request.user, caja.viaje):
+            return None, Response(
+                {'detail': 'Solo el encargado de este viaje puede registrar o cerrar la caja.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return caja, None
+
+    @action(detail=True, methods=['post'])
+    def aumentar(self, request, pk=None):
+        if not caja_service.puede_asignar_caja(request.user):
+            return Response(
+                {'detail': 'Solo un encargado puede aumentar la caja.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        caja = self.get_object()
+        try:
+            caja_service.aumentar(
+                caja, request.data.get('monto'), request.user, request.data.get('descripcion') or '',
+            )
+        except ValidationError as exc:
+            return _error_caja(exc)
+        return Response(self.get_serializer(_caja_fresca(caja)).data)
+
+    @action(detail=True, methods=['post'])
+    def gastos(self, request, pk=None):
+        caja, error = self._caja_rendicion(request)
+        if error:
+            return error
+        try:
+            caja_service.registrar_gasto(
+                caja,
+                request.data.get('monto'),
+                request.user,
+                request.data.get('categoria'),
+                request.data.get('descripcion') or '',
+            )
+        except ValidationError as exc:
+            return _error_caja(exc)
+        return Response(self.get_serializer(_caja_fresca(caja)).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path=r'movimientos/(?P<mov_id>[^/.]+)/borrar')
+    def borrar_movimiento(self, request, pk=None, mov_id=None):
+        caja, error = self._caja_rendicion(request)
+        if error:
+            return error
+        try:
+            movimiento = caja.movimientos.get(pk=mov_id)
+        except CajaMovimiento.DoesNotExist:
+            return Response({'detail': 'Movimiento no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            caja_service.borrar_movimiento(caja, movimiento, request.user)
+        except ValidationError as exc:
+            return _error_caja(exc)
+        return Response(self.get_serializer(_caja_fresca(caja)).data)
+
+    @action(detail=True, methods=['post'])
+    def cerrar(self, request, pk=None):
+        caja, error = self._caja_rendicion(request)
+        if error:
+            return error
+        try:
+            caja_service.cerrar(
+                caja,
+                request.user,
+                request.data.get('observacion') or '',
+                request.data.get('saldo_devuelto'),
+            )
+        except ValidationError as exc:
+            return _error_caja(exc)
+        return Response(self.get_serializer(_caja_fresca(caja)).data)
+
+    @action(detail=True, methods=['post'])
+    def reabrir(self, request, pk=None):
+        if not caja_service.puede_asignar_caja(request.user):
+            return Response(
+                {'detail': 'Solo un encargado puede reabrir la caja.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        caja = self.get_object()
+        try:
+            caja_service.reabrir(caja)
+        except ValidationError as exc:
+            return _error_caja(exc)
+        return Response(self.get_serializer(_caja_fresca(caja)).data)
 
 
 class ConfiguracionEmisorView(APIView):

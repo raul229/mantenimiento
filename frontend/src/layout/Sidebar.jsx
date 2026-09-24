@@ -7,6 +7,7 @@ import {
   Truck,
   FileText,
   Shield,
+  Wallet,
   ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -17,6 +18,7 @@ const items = [
   { to: "/clientes", label: "Clientes", icon: Users, modulo: "clientes" },
   { to: "/viajes", label: "Rutas y viajes", icon: Route, modulo: "viajes" },
   { to: "/recojos", label: "Recojos", icon: Recycle, modulo: "recojos" },
+  { to: "/gastos", label: "Caja y gastos", icon: Wallet, modulo: "gastos" },
   { to: "/flota", label: "Vehículos", icon: Truck, modulo: "flota" },
   { to: "/emisor", label: "Datos de emisión", icon: FileText, modulo: "emisor" },
   { to: "/usuarios", label: "Usuarios", icon: Shield, modulo: "usuarios" },

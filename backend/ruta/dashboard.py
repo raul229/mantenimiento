@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from cuentas.models import solo_asignados
-from .models import Recojo, RecojoDetalle, Viaje, ViajeGasto, Cliente, Ciudad
+from .models import Recojo, RecojoDetalle, Viaje, CajaMovimiento, Cliente, Ciudad
 from mantenimiento.models import Vehiculo
 
 
@@ -74,15 +74,17 @@ class DashboardView(APIView):
         publicos = activos.filter(tipo='publico').count()
         privados = activos.filter(tipo='privado').count()
 
-        caja = ViajeGasto.objects.filter(
-            viaje__fecha_inicio__gte=start,
-            viaje__fecha_inicio__lte=end,
+        caja = CajaMovimiento.objects.filter(
+            tipo=CajaMovimiento.GASTO,
+            caja__viaje__fecha_inicio__gte=start,
+            caja__viaje__fecha_inicio__lte=end,
         )
         if solo_asignados(request.user):
-            caja = caja.filter(viaje__conductor=request.user)
+            caja = caja.filter(caja__viaje__conductor=request.user)
         if ciudad_id:
             caja = caja.filter(
-                Q(viaje__recojos__sede__ciudad_id=ciudad_id) | Q(viaje__ruta__sedes__ciudad_id=ciudad_id)
+                Q(caja__viaje__recojos__sede__ciudad_id=ciudad_id)
+                | Q(caja__viaje__ruta__sedes__ciudad_id=ciudad_id)
             ).distinct()
         caja_chica = float(caja.aggregate(s=Sum('monto'))['s'] or 0)
 

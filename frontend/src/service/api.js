@@ -73,6 +73,18 @@ export const RecojoService = crud("/recojos/");
 export const SedeService = crud("/sedes/");
 export const PersonaService = crud("/personas/");
 export const TipoResiduoService = crud("/tipos-residuo/");
+export const CategoriaGastoService = crud("/categorias-gasto/");
+export const CajaService = {
+  getAll: (params) => api.get("/cajas/", { params }),
+  get: (id) => api.get(`/cajas/${id}/`),
+  asignar: (datos) => api.post("/cajas/asignar/", datos),
+  aumentar: (id, datos) => api.post(`/cajas/${id}/aumentar/`, datos),
+  gastar: (id, datos) => api.post(`/cajas/${id}/gastos/`, datos),
+  borrarMovimiento: (id, movId) => api.post(`/cajas/${id}/movimientos/${movId}/borrar/`),
+  cerrar: (id, datos) => api.post(`/cajas/${id}/cerrar/`, datos),
+  reabrir: (id) => api.post(`/cajas/${id}/reabrir/`),
+};
+
 export const UsuarioService = { getAll: (params) => api.get("/usuarios/", { params }) };
 export const PersonalService = crud("/personal/");
 export const RolService = {

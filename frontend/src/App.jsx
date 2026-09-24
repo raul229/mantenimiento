@@ -9,6 +9,7 @@ import { ViajesPage } from "@/pages/ViajesPage";
 import { RecojosPage } from "@/pages/RecojosPage";
 import { EmisorPage } from "@/pages/EmisorPage";
 import { UsuariosPage } from "@/pages/UsuariosPage";
+import { GastosPage } from "@/pages/GastosPage";
 
 function Guard({ children, modulo }) {
   const { user, ready, can } = useAuth();
@@ -50,6 +51,7 @@ function AppRoutes() {
         <Route path="/flota" element={<Guard modulo="flota"><FlotaPage /></Guard>} />
         <Route path="/viajes" element={<Guard modulo="viajes"><ViajesPage /></Guard>} />
         <Route path="/recojos" element={<Guard modulo="recojos"><RecojosPage /></Guard>} />
+        <Route path="/gastos" element={<Guard modulo="gastos"><GastosPage /></Guard>} />
         <Route path="/emisor" element={<Guard modulo="emisor"><EmisorPage /></Guard>} />
         <Route path="/usuarios" element={<Guard modulo="usuarios"><UsuariosPage /></Guard>} />
       </Route>
