@@ -91,6 +91,20 @@ export function DashboardPage() {
             accent="bg-rose-50 text-rose-600"
           />
         </div>
+        {can("flota") && (d.fallas_abiertas || d.preventivos_vencidos || d.preventivos_por_vencer) ? (
+          <button
+            type="button"
+            className="flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-left text-sm text-amber-900"
+            onClick={() => navigate("/flota")}
+          >
+            <span className="font-medium">Taller</span>
+            <span>
+              {d.fallas_abiertas ? `${d.fallas_abiertas} fallas abiertas` : ""}
+              {d.preventivos_vencidos ? ` · ${d.preventivos_vencidos} servicios vencidos` : ""}
+              {d.preventivos_por_vencer ? ` · ${d.preventivos_por_vencer} por vencer` : ""}
+            </span>
+          </button>
+        ) : null}
 
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="card bg-base-100 shadow-sm">

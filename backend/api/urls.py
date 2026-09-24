@@ -8,6 +8,7 @@ from .api_urls import router
 from .auth_views import me, usuarios_mini
 from ruta.dashboard import DashboardView
 from ruta.views import ConfiguracionEmisorView
+from mantenimiento.views import AlertasTallerView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -17,6 +18,7 @@ urlpatterns = [
     path('api/usuarios/', usuarios_mini),
     path('api/dashboard/', DashboardView.as_view()),
     path('api/configuracion-emisor/', ConfiguracionEmisorView.as_view()),
+    path('api/alertas-taller/', AlertasTallerView.as_view()),
     path('api/', include(router.urls)),
 ]
 

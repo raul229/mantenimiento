@@ -1,9 +1,42 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { NotificacionService } from "@/service/api";
 import { etiquetaRol } from "@/utils/roles";
+import { formatDateTime } from "@/utils/format";
 
 export function Topbar({ title, children }) {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const navigate = useNavigate();
+  const [notifs, setNotifs] = useState([]);
+
+  const loadNotifs = () => {
+    if (!can("flota")) return;
+    NotificacionService.getAll()
+      .then((res) => setNotifs(res.data || []))
+      .catch(() => setNotifs([]));
+  };
+
+  useEffect(() => { loadNotifs(); }, [user]);
+
+  const unread = notifs.filter((n) => !n.leida).length;
+
+  const abrir = async (n) => {
+    if (!n.leida) {
+      try { await NotificacionService.leer(n.id); } catch { /* ignore */ }
+    }
+    setNotifs((prev) => prev.map((x) => (x.id === n.id ? { ...x, leida: true } : x)));
+    navigate("/flota");
+  };
+
+  const leerTodas = async () => {
+    try {
+      await NotificacionService.leerTodas();
+      setNotifs((prev) => prev.map((n) => ({ ...n, leida: true })));
+    } catch { /* ignore */ }
+  };
+
   return (
     <header className="navbar min-h-14 border-b border-base-300 bg-base-100/80 px-6 backdrop-blur">
       <div className="flex-1">
@@ -11,12 +44,42 @@ export function Topbar({ title, children }) {
       </div>
       <div className="flex items-center gap-3">
         {children}
-        <button type="button" className="btn btn-ghost btn-circle">
-          <div className="indicator">
-            <Bell size={18} />
-            <span className="indicator-item status status-error h-2 w-2" />
+        {can("flota") && (
+          <div className="dropdown dropdown-end">
+            <button type="button" tabIndex={0} className="btn btn-ghost btn-circle">
+              <div className="indicator">
+                <Bell size={18} />
+                {unread > 0 && (
+                  <span className="indicator-item badge badge-error badge-xs">{unread > 9 ? "9+" : unread}</span>
+                )}
+              </div>
+            </button>
+            <div tabIndex={0} className="dropdown-content z-30 mt-2 w-80 rounded-box bg-base-100 p-2 shadow-lg">
+              <div className="flex items-center justify-between px-2 py-1">
+                <p className="text-sm font-semibold">Avisos de taller</p>
+                {unread > 0 && (
+                  <button type="button" className="btn btn-ghost btn-xs" onClick={leerTodas}>Marcar leídas</button>
+                )}
+              </div>
+              <ul className="max-h-80 overflow-y-auto">
+                {notifs.slice(0, 12).map((n) => (
+                  <li key={n.id}>
+                    <button
+                      type="button"
+                      className={`w-full rounded-xl px-3 py-2 text-left ${n.leida ? "opacity-60" : "bg-primary/5"}`}
+                      onClick={() => abrir(n)}
+                    >
+                      <p className="text-sm font-medium">{n.titulo}</p>
+                      <p className="text-xs text-muted">{n.mensaje}</p>
+                      <p className="mt-1 text-xs text-muted">{formatDateTime(n.creado_en)}</p>
+                    </button>
+                  </li>
+                ))}
+                {!notifs.length && <li className="px-3 py-6 text-center text-sm text-muted">Sin avisos</li>}
+              </ul>
+            </div>
           </div>
-        </button>
+        )}
         <div className="flex items-center gap-2 rounded-full bg-base-200 py-1 pl-1 pr-3">
           <div className="avatar placeholder">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-content">

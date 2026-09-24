@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 
 from cuentas.models import solo_asignados
 from .models import Recojo, RecojoDetalle, Viaje, CajaMovimiento, Cliente, Ciudad
-from mantenimiento.models import Vehiculo
+from mantenimiento.models import Falla, Vehiculo
+from mantenimiento.services import alertas_de, asegurar_servicios
 
 
 def _month_range(year, month):
@@ -159,6 +160,19 @@ class DashboardView(APIView):
 
         ciudades = [{'id': c.id, 'nombre': c.nombre} for c in Ciudad.objects.all()]
 
+        fallas_abiertas = Falla.objects.filter(
+            estado__in=[Falla.ABIERTA, Falla.EN_ORDEN, Falla.NO_REPARADA],
+        ).count()
+        preventivos_vencidos = 0
+        preventivos_por_vencer = 0
+        for veh in vehiculos:
+            asegurar_servicios(veh)
+            for alerta in alertas_de(veh):
+                if alerta['estado'] == 'vencido':
+                    preventivos_vencidos += 1
+                elif alerta['estado'] == 'por_vencer':
+                    preventivos_por_vencer += 1
+
         return Response({
             'mes': f'{year:04d}-{month:02d}',
             'kg_mes': kg_mes,
@@ -174,4 +188,7 @@ class DashboardView(APIView):
             'viajes_hoy_list': viajes_hoy_list,
             'flota': flota,
             'ciudades': ciudades,
+            'fallas_abiertas': fallas_abiertas,
+            'preventivos_vencidos': preventivos_vencidos,
+            'preventivos_por_vencer': preventivos_por_vencer,
         })

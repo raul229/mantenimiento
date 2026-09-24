@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Truck } from "lucide-react";
-import { VehiculoService, MantenimientoService, DocumentoService } from "@/service/api";
+import { Plus, Truck } from "lucide-react";
+import {
+  DocumentoService, FallaService, MantenimientoService, ServicioVehiculoService,
+  TipoFallaService, TipoServicioService, VehiculoService,
+} from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Modal, Field, inputClass } from "@/components/Modal";
-import { ESTADO_FLOTA, formatDate, formatMoney } from "@/utils/format";
+import { ESTADO_FLOTA, ESTADO_SERVICIO, formatKm } from "@/utils/format";
+import { useAuth } from "@/context/AuthContext";
+import { FallasTab } from "@/pages/flota/FallasTab";
+import { OrdenesTab } from "@/pages/flota/OrdenesTab";
+import { PreventivosTab } from "@/pages/flota/PreventivosTab";
 
 const emptyForm = {
   marca: "",
@@ -20,14 +27,23 @@ const emptyForm = {
 };
 
 export function FlotaPage() {
+  const { user, canWrite } = useAuth();
+  const puedeTaller = canWrite("flota") && !user?.solo_asignados;
+  const puedeReportar = canWrite("flota");
+
   const [tab, setTab] = useState("flota");
   const [vehiculos, setVehiculos] = useState([]);
   const [mantenimientos, setMantenimientos] = useState([]);
   const [documentos, setDocumentos] = useState([]);
+  const [fallas, setFallas] = useState([]);
+  const [tiposFalla, setTiposFalla] = useState([]);
+  const [tiposServicio, setTiposServicio] = useState([]);
+  const [servicios, setServicios] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [q, setQ] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -35,11 +51,19 @@ export function FlotaPage() {
       VehiculoService.getAll(),
       MantenimientoService.getAll(),
       DocumentoService.getAll({ tipo_entidad: "vehiculo" }),
+      FallaService.getAll(),
+      TipoFallaService.getAll(),
+      TipoServicioService.getAll(),
+      ServicioVehiculoService.getAll(),
     ])
-      .then(([v, m, d]) => {
+      .then(([v, m, d, f, tf, ts, sv]) => {
         setVehiculos(v.data);
         setMantenimientos(m.data);
         setDocumentos(d.data);
+        setFallas(f.data);
+        setTiposFalla(tf.data);
+        setTiposServicio(ts.data);
+        setServicios(sv.data);
       })
       .finally(() => setLoading(false));
   };
@@ -47,17 +71,19 @@ export function FlotaPage() {
   useEffect(() => { load(); }, []);
 
   const stats = useMemo(() => {
-    const ops = { total: vehiculos.length, operativos: 0, en_taller: 0, detenido: 0 };
+    const ops = { total: vehiculos.length, operativos: 0, en_taller: 0, detenido: 0, fallas: 0 };
     vehiculos.forEach((v) => {
       if (v.estado_operativo === "en_taller") ops.en_taller += 1;
       else if (v.estado_operativo === "detenido") ops.detenido += 1;
       else ops.operativos += 1;
+      ops.fallas += Number(v.fallas_abiertas || 0);
     });
     return ops;
   }, [vehiculos]);
 
   const docsOf = (vehiculo) => documentos.filter((d) => d.entidad_id === vehiculo?.id);
   const mantsOf = (vehiculo) => mantenimientos.filter((m) => m.vehiculo?.id === vehiculo?.id);
+  const preventivosOf = (vehiculo) => (vehiculo?.preventivos || servicios.filter((s) => s.vehiculo?.id === vehiculo?.id));
 
   const save = async () => {
     try {
@@ -76,39 +102,45 @@ export function FlotaPage() {
     }
   };
 
+  const tabs = [
+    ["flota", "Flota"],
+    ["fallas", "Fallas"],
+    ["ordenes", "Órdenes"],
+    ["preventivos", "Preventivos"],
+    ["documentos", "Documentos"],
+  ];
+
   return (
     <>
-      <Topbar title="Flota y mantenimiento" />
-      <div className="flex min-h-0 flex-1 gap-4 p-6">
-        <div className="min-w-0 flex-1 space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {[["flota", "Flota"], ["ordenes", "Órdenes de mantenimiento"], ["documentos", "Documentos"]].map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setTab(id)}
-                className={`btn btn-sm rounded-full ${tab === id ? "btn-primary" : "btn-ghost bg-base-100"}`}
-              >
-                {label}
-              </button>
-            ))}
+      <Topbar title="Flota y taller" />
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          {tabs.map(([id, label]) => (
             <button
+              key={id}
               type="button"
-              onClick={() => setModal(true)}
-              className="btn btn-primary ml-auto"
+              onClick={() => { setTab(id); setQ(""); }}
+              className={`btn btn-sm rounded-full ${tab === id ? "btn-primary" : "btn-ghost bg-base-100"}`}
             >
-              Nuevo vehículo
+              {label}
             </button>
-          </div>
-          <div className="grid grid-cols-4 gap-3">
-            <Stat n={stats.total} label="vehículos" />
-            <Stat n={stats.operativos} label="operativos" color="text-emerald-700" />
-            <Stat n={stats.en_taller} label="en taller" color="text-amber-700" />
-            <Stat n={stats.detenido} label="detenido" color="text-rose-600" />
-          </div>
+          ))}
+          {tab === "flota" && puedeTaller && (
+            <button type="button" onClick={() => setModal(true)} className="btn btn-primary ml-auto">
+              <Plus size={16} /> Nuevo vehículo
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          <Stat n={stats.total} label="vehículos" />
+          <Stat n={stats.operativos} label="operativos" color="text-emerald-700" />
+          <Stat n={stats.en_taller} label="en taller" color="text-amber-700" />
+          <Stat n={stats.fallas} label="fallas abiertas" color="text-rose-600" />
+        </div>
 
-          {tab === "flota" && (
-            <div className="space-y-2">
+        {tab === "flota" && (
+          <div className="flex min-h-0 flex-1 gap-4">
+            <div className="min-w-0 flex-1 space-y-2">
               {loading && <p className="text-muted">Cargando…</p>}
               {vehiculos.map((v) => (
                 <button
@@ -126,98 +158,117 @@ export function FlotaPage() {
                       <StatusBadge map={ESTADO_FLOTA} value={v.estado_operativo} />
                     </div>
                     <p className="text-sm text-muted">{v.marca} {v.modelo} {v.anio || ""}</p>
-                    <p className="text-xs text-muted">km {Number(v.kilometraje_actual || 0).toLocaleString("es-PE")}
-                      {v.proximo_mantenimiento_km ? ` · Próximo mant. ${Number(v.proximo_mantenimiento_km).toLocaleString("es-PE")} km` : ""}
+                    <p className="text-xs text-muted">
+                      {formatKm(v.kilometraje_actual)}
+                      {v.fallas_abiertas ? ` · ${v.fallas_abiertas} fallas` : ""}
+                      {v.proximo_mantenimiento_km ? ` · Próximo ${formatKm(v.proximo_mantenimiento_km)}` : ""}
                     </p>
-                  </div>
-                  <div className="text-right text-xs text-muted">
-                    Combustible {v.nivel_combustible ?? 0}%
                   </div>
                 </button>
               ))}
             </div>
-          )}
+            {selected && (
+              <DetailPanel
+                title={selected.placa}
+                subtitle={`${selected.marca} ${selected.modelo}`}
+                badge={<StatusBadge map={ESTADO_FLOTA} value={selected.estado_operativo} />}
+                onClose={() => setSelected(null)}
+              >
+                <Row label="Tipo" value={selected.tipo} />
+                <Row label="Año" value={selected.anio || "—"} />
+                <Row label="Kilometraje" value={formatKm(selected.kilometraje_actual)} />
+                <Row label="Fallas abiertas" value={selected.fallas_abiertas ?? 0} />
+                <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Preventivos</h3>
+                {preventivosOf(selected).map((s) => (
+                  <p key={s.tipo_id || s.id} className="mb-1 flex justify-between gap-2 text-sm">
+                    <span>{s.tipo || s.tipo_nombre}</span>
+                    <StatusBadge map={ESTADO_SERVICIO} value={s.estado} />
+                  </p>
+                ))}
+                {!preventivosOf(selected).length && <p className="text-sm text-muted">Sin plan preventivo</p>}
+                <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Últimas órdenes</h3>
+                {mantsOf(selected).slice(0, 4).map((m) => (
+                  <p key={m.id} className="mb-1 text-sm">{m.fecha_inicio} · {m.descripcion || m.tipo_mantenimiento} · {m.estado_label}</p>
+                ))}
+                <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Documentos</h3>
+                {docsOf(selected).map((d) => (
+                  <p key={d.id} className="mb-1 text-sm capitalize">{d.tipo_documento.replace("_", " ")}</p>
+                ))}
+                {puedeReportar && (
+                  <button type="button" className="btn btn-primary mt-4 w-full" onClick={() => setTab("fallas")}>
+                    Reportar falla
+                  </button>
+                )}
+              </DetailPanel>
+            )}
+          </div>
+        )}
 
-          {tab === "ordenes" && (
-            <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-muted">
-                  <tr>
-                    <th className="px-4 py-3">Fecha</th>
-                    <th>Vehículo</th>
-                    <th>Tipo</th>
-                    <th>Descripción</th>
-                    <th>Costo</th>
+        {tab === "fallas" && (
+          <FallasTab
+            fallas={fallas}
+            vehiculos={vehiculos}
+            tipos={tiposFalla}
+            loading={loading}
+            puedeTaller={puedeTaller}
+            puedeReportar={puedeReportar}
+            onReload={load}
+            q={q}
+            setQ={setQ}
+          />
+        )}
+        {tab === "ordenes" && (
+          <OrdenesTab
+            ordenes={mantenimientos}
+            vehiculos={vehiculos}
+            fallas={fallas}
+            tiposServicio={tiposServicio}
+            loading={loading}
+            puedeTaller={puedeTaller}
+            onReload={load}
+            q={q}
+            setQ={setQ}
+          />
+        )}
+        {tab === "preventivos" && (
+          <PreventivosTab
+            servicios={servicios}
+            tipos={tiposServicio}
+            vehiculos={vehiculos}
+            loading={loading}
+            puedeTaller={puedeTaller}
+            onReload={load}
+            q={q}
+            setQ={setQ}
+          />
+        )}
+
+        {tab === "documentos" && (
+          <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase text-muted">
+                <tr>
+                  <th className="px-4 py-3">Tipo</th>
+                  <th>Número</th>
+                  <th>Vence</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documentos.map((d) => (
+                  <tr key={d.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3 capitalize">{d.tipo_documento.replace("_", " ")}</td>
+                    <td>{d.numero_documento || "—"}</td>
+                    <td>{d.fecha_vencimiento || "—"}</td>
+                    <td className="capitalize">{d.estado}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {mantenimientos.map((m) => (
-                    <tr key={m.id} className="border-t border-slate-100">
-                      <td className="px-4 py-3">{formatDate(m.fecha_inicio)}</td>
-                      <td>{m.vehiculo ? `${m.vehiculo.marca} ${m.vehiculo.placa}` : "—"}</td>
-                      <td className="capitalize">{m.tipo_mantenimiento}</td>
-                      <td>{m.descripcion}</td>
-                      <td>{m.costo != null ? formatMoney(m.costo) : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {tab === "documentos" && (
-            <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-muted">
-                  <tr>
-                    <th className="px-4 py-3">Tipo</th>
-                    <th>Número</th>
-                    <th>Vence</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {documentos.map((d) => (
-                    <tr key={d.id} className="border-t border-slate-100">
-                      <td className="px-4 py-3 capitalize">{d.tipo_documento.replace("_", " ")}</td>
-                      <td>{d.numero_documento || "—"}</td>
-                      <td>{formatDate(d.fecha_vencimiento)}</td>
-                      <td className="capitalize">{d.estado}</td>
-                    </tr>
-                  ))}
-                  {!documentos.length && (
-                    <tr><td className="px-4 py-8 text-muted" colSpan={4}>Sin documentos de flota</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {selected && tab === "flota" && (
-          <DetailPanel
-            title={selected.placa}
-            subtitle={`${selected.marca} ${selected.modelo}`}
-            badge={<StatusBadge map={ESTADO_FLOTA} value={selected.estado_operativo} />}
-            onClose={() => setSelected(null)}
-          >
-            <Row label="Tipo" value={selected.tipo} />
-            <Row label="Año" value={selected.anio || "—"} />
-            <Row label="VIN" value={selected.vin || "—"} />
-            <Row label="Kilometraje" value={Number(selected.kilometraje_actual || 0).toLocaleString("es-PE")} />
-            <Row label="Combustible" value={`${selected.nivel_combustible ?? 0}%`} />
-            <Row label="Conductor" value="Se asigna en cada viaje" />
-            <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Últimos mantenimientos</h3>
-            {mantsOf(selected).slice(0, 4).map((m) => (
-              <p key={m.id} className="mb-1 text-sm">{formatDate(m.fecha_inicio)} · {m.descripcion}</p>
-            ))}
-            {!mantsOf(selected).length && <p className="text-sm text-muted">Sin mantenimientos</p>}
-            <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Documentos</h3>
-            {docsOf(selected).map((d) => (
-              <p key={d.id} className="mb-1 text-sm capitalize">{d.tipo_documento.replace("_", " ")} · vence {formatDate(d.fecha_vencimiento)}</p>
-            ))}
-            {!docsOf(selected).length && <p className="text-sm text-muted">Sin documentos</p>}
-          </DetailPanel>
+                ))}
+                {!documentos.length && (
+                  <tr><td className="px-4 py-8 text-muted" colSpan={4}>Sin documentos de flota</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
       <Modal open={modal} title="Nuevo vehículo" onClose={() => setModal(false)} onSubmit={save}>

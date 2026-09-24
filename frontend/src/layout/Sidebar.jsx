@@ -19,7 +19,7 @@ const items = [
   { to: "/viajes", label: "Rutas y viajes", icon: Route, modulo: "viajes" },
   { to: "/recojos", label: "Recojos", icon: Recycle, modulo: "recojos" },
   { to: "/gastos", label: "Caja y gastos", icon: Wallet, modulo: "gastos" },
-  { to: "/flota", label: "Vehículos", icon: Truck, modulo: "flota" },
+  { to: "/flota", label: "Flota y taller", icon: Truck, modulo: "flota" },
   { to: "/emisor", label: "Datos de emisión", icon: FileText, modulo: "emisor" },
   { to: "/usuarios", label: "Usuarios", icon: Shield, modulo: "usuarios" },
 ];

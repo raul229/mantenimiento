@@ -199,6 +199,8 @@ class Viaje(models.Model):
         if self.vehiculo.kilometraje_actual != self.kilometraje_final:
             self.vehiculo.kilometraje_actual = self.kilometraje_final
             self.vehiculo.save(update_fields=['kilometraje_actual'])
+            from mantenimiento.services import sincronizar_preventivos
+            sincronizar_preventivos(self.vehiculo)
 
     def save(self, *args, **kwargs):
         if self._state.adding and self.vehiculo and self.kilometraje_inicio is None:

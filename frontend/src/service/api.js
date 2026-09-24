@@ -65,7 +65,29 @@ function crud(endpoint) {
 export const ClienteService = crud("/clientes/");
 export const VehiculoService = crud("/vehiculos/");
 export const ViajeService = crud("/viajes/");
-export const MantenimientoService = crud("/mantenimientos/");
+export const MantenimientoService = {
+  ...crud("/mantenimientos/"),
+  enviarTaller: (id) => api.post(`/mantenimientos/${id}/enviar-taller/`),
+  gastar: (id, datos) => api.post(`/mantenimientos/${id}/gastos/`, datos),
+  borrarGasto: (id, gastoId) => api.post(`/mantenimientos/${id}/gastos/${gastoId}/borrar/`),
+  cerrar: (id, datos) => api.post(`/mantenimientos/${id}/cerrar/`, datos),
+};
+export const FallaService = crud("/fallas/");
+export const TipoFallaService = crud("/tipos-falla/");
+export const TipoServicioService = crud("/tipos-servicio/");
+export const ServicioVehiculoService = {
+  ...crud("/servicios-vehiculo/"),
+  registrar: (datos) => api.post("/servicios-vehiculo/registrar/", datos),
+};
+export const HistorialServicioService = crud("/historial-servicios/");
+export const NotificacionService = {
+  getAll: (params) => api.get("/notificaciones/", { params }),
+  leer: (id) => api.post(`/notificaciones/${id}/leer/`),
+  leerTodas: () => api.post("/notificaciones/leer-todas/"),
+};
+export const AlertasTallerService = {
+  getAll: () => api.get("/alertas-taller/"),
+};
 export const DocumentoService = crud("/documentos/");
 export const RutaService = crud("/rutas/");
 export const CiudadService = crud("/ciudades/");

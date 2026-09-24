@@ -25,6 +25,13 @@ export function formatDate(value) {
   return d.toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+export function formatDateTime(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
 export function formatTime(value) {
   if (!value) return "—";
   return String(value).slice(0, 5);
@@ -75,4 +82,43 @@ export const ESTADO_RECOJO = {
   pendiente: { label: "Pendiente", className: "badge-ghost" },
   en_sitio: { label: "En sitio", className: "badge-warning" },
   completado: { label: "Completado", className: "badge-success" },
+};
+
+export const ESTADO_FALLA = {
+  abierta: { label: "Abierta", className: "badge-warning" },
+  en_orden: { label: "En orden", className: "badge-info" },
+  reparada: { label: "Reparada", className: "badge-success" },
+  no_reparada: { label: "No reparada", className: "badge-error" },
+};
+
+export const PRIORIDAD_FALLA = {
+  critica: { label: "Crítica", className: "badge-error" },
+  alta: { label: "Alta", className: "badge-warning" },
+  media: { label: "Media", className: "badge-info" },
+  baja: { label: "Baja", className: "badge-ghost" },
+};
+
+export const ESTADO_ORDEN = {
+  abierta: { label: "Abierta", className: "badge-info" },
+  en_taller: { label: "En taller", className: "badge-warning" },
+  cerrada: { label: "Cerrada", className: "badge-success" },
+};
+
+export const TIPO_MANTENIMIENTO = {
+  correctivo: { label: "Correctivo", className: "badge-warning" },
+  preventivo: { label: "Preventivo", className: "badge-info" },
+};
+
+export const ESTADO_SERVICIO = {
+  vencido: { label: "Vencido", className: "badge-error" },
+  por_vencer: { label: "Por vencer", className: "badge-warning" },
+  al_dia: { label: "Al día", className: "badge-success" },
+  sin_registro: { label: "Sin registro", className: "badge-ghost" },
+};
+
+export const CATEGORIA_TALLER = {
+  repuesto: "Repuesto",
+  mano_obra: "Mano de obra",
+  tercero: "Tercero",
+  otro: "Otro",
 };
