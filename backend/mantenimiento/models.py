@@ -37,7 +37,7 @@ class Vehiculo(models.Model):
             return 'en_taller'
         if self.estado == 'inactivo':
             return 'detenido'
-        if self.viajes.filter(estado='en curso').exists():
+        if self.viajes.exclude(estado='cancelado').filter(kilometraje_final__isnull=True).exists():
             return 'en_ruta'
         return 'disponible'
 

@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Q
 from django.http import HttpResponse
+from cuentas.models import Perfil, rol_de
 from .models import (
     Ciudad, Cliente, Sede, Ruta, Viaje, Recojo, Celular, Persona,
     TipoResiduo, RecojoDetalle, ViajeGasto,
@@ -19,11 +20,13 @@ from . import guias as guias_service
 
 
 class CelularViewSet(viewsets.ModelViewSet):
+    modulo = 'clientes'
     queryset = Celular.objects.all()
     serializer_class = CelularSerializer
 
 
 class PersonaViewSet(viewsets.ModelViewSet):
+    modulo = 'clientes'
     queryset = Persona.objects.prefetch_related('celulares').all()
     serializer_class = PersonaSerializer
 
@@ -36,11 +39,13 @@ class PersonaViewSet(viewsets.ModelViewSet):
 
 
 class CiudadViewSet(viewsets.ModelViewSet):
+    modulo = 'viajes'
     queryset = Ciudad.objects.all().order_by('nombre')
     serializer_class = CiudadSerializer
 
 
 class ClienteViewSet(viewsets.ModelViewSet):
+    modulo = 'clientes'
     queryset = Cliente.objects.select_related('empresa', 'persona').prefetch_related(
         'personas__celulares',
         'persona__celulares',
@@ -51,6 +56,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
 
 class SedeViewSet(viewsets.ModelViewSet):
+    modulo = 'viajes'
     queryset = Sede.objects.select_related(
         'cliente', 'cliente__empresa', 'cliente__persona', 'ciudad', 'persona',
     ).all()
@@ -58,11 +64,13 @@ class SedeViewSet(viewsets.ModelViewSet):
 
 
 class RutaViewSet(viewsets.ModelViewSet):
+    modulo = 'viajes'
     queryset = Ruta.objects.prefetch_related('sedes').all()
     serializer_class = RutaSerializer
 
 
 class ViajeViewSet(viewsets.ModelViewSet):
+    modulo = 'viajes'
     queryset = Viaje.objects.select_related('vehiculo', 'conductor', 'ruta').prefetch_related(
         'sedes__cliente__empresa',
         'sedes__cliente__persona',
@@ -76,8 +84,33 @@ class ViajeViewSet(viewsets.ModelViewSet):
     ).all()
     serializer_class = ViajeSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if rol_de(self.request.user) == Perfil.CONDUCTOR:
+            qs = qs.filter(conductor=self.request.user)
+        return qs
+
+    def _conductor_solo_odometro(self, request):
+        if rol_de(request.user) != Perfil.CONDUCTOR:
+            return None
+        if set(request.data.keys()) - {'kilometraje_final'}:
+            return Response(
+                {'detail': 'Solo puedes registrar el odómetro de tus viajes.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def update(self, request, *args, **kwargs):
+        bloqueo = self._conductor_solo_odometro(request)
+        return bloqueo or super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        bloqueo = self._conductor_solo_odometro(request)
+        return bloqueo or super().partial_update(request, *args, **kwargs)
+
 
 class RecojoViewSet(viewsets.ModelViewSet):
+    modulo = 'recojos'
     queryset = Recojo.objects.select_related(
         'viaje',
         'viaje__vehiculo',
@@ -90,23 +123,33 @@ class RecojoViewSet(viewsets.ModelViewSet):
     ).prefetch_related('detalles__tipo').order_by('-fecha', '-id')
     serializer_class = RecojoSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if rol_de(self.request.user) == Perfil.CONDUCTOR:
+            qs = qs.filter(viaje__conductor=self.request.user)
+        return qs
+
 
 class TipoResiduoViewSet(viewsets.ModelViewSet):
+    modulo = 'recojos'
     queryset = TipoResiduo.objects.all()
     serializer_class = TipoResiduoSerializer
 
 
 class RecojoDetalleViewSet(viewsets.ModelViewSet):
+    modulo = 'recojos'
     queryset = RecojoDetalle.objects.select_related('tipo', 'recojo').all()
     serializer_class = RecojoDetalleSerializer
 
 
 class ViajeGastoViewSet(viewsets.ModelViewSet):
+    modulo = 'viajes'
     queryset = ViajeGasto.objects.all()
     serializer_class = ViajeGastoSerializer
 
 
 class ConfiguracionEmisorView(APIView):
+    modulo = 'emisor'
     """Datos del transportista emisor. Siempre opera sobre el registro único."""
 
     def get(self, request):
@@ -122,6 +165,7 @@ class ConfiguracionEmisorView(APIView):
 
 
 class GuiaRemisionViewSet(viewsets.ModelViewSet):
+    modulo = 'guias'
     queryset = GuiaRemision.objects.select_related(
         'recojo', 'recojo__sede', 'recojo__viaje',
     ).prefetch_related('items').all()

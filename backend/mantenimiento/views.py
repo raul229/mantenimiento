@@ -5,11 +5,13 @@ from .services import MantenimientoService
 
 
 class VehiculoViewSet(viewsets.ModelViewSet):
+    modulo = 'flota'
     queryset = Vehiculo.objects.select_related('conductor_asignado').all()
     serializer_class = VehiculoSerializer
 
 
 class MantenimientoViewSet(viewsets.ModelViewSet):
+    modulo = 'flota'
     queryset = Mantenimiento.objects.select_related('vehiculo').prefetch_related('fallas').all()
     serializer_class = MantenimientoSerializer
 
@@ -36,6 +38,7 @@ class MantenimientoViewSet(viewsets.ModelViewSet):
 
 
 class DocumentoViewSet(viewsets.ModelViewSet):
+    modulo = 'flota'
     queryset = Documento.objects.all()
     serializer_class = DocumentoSerializer
 
@@ -51,5 +54,6 @@ class DocumentoViewSet(viewsets.ModelViewSet):
 
 
 class FallaViewSet(viewsets.ModelViewSet):
+    modulo = 'flota'
     queryset = Falla.objects.select_related('vehiculo').all()
     serializer_class = FallaSerializer

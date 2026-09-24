@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -442,8 +442,11 @@ def _sync_estado_viaje(viaje):
         if viaje.estado != 'completado':
             viaje.estado = 'completado'
             campos.append('estado')
-        if not viaje.fecha_fin:
-            viaje.fecha_fin = timezone.localdate()
+        cierre = timezone.localdate()
+        if viaje.fecha_inicio and cierre < viaje.fecha_inicio:
+            cierre = viaje.fecha_inicio
+        if not viaje.fecha_fin or viaje.fecha_fin < viaje.fecha_inicio:
+            viaje.fecha_fin = cierre
             campos.append('fecha_fin')
     elif hechas > 0 and viaje.estado != 'en curso':
         viaje.estado = 'en curso'
@@ -520,6 +523,7 @@ class ViajeSerializer(serializers.ModelSerializer):
     paradas_total = serializers.SerializerMethodField()
     paradas_hechas = serializers.SerializerMethodField()
     costo_total = serializers.SerializerMethodField()
+    km_recorridos = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Viaje
@@ -535,6 +539,7 @@ class ViajeSerializer(serializers.ModelSerializer):
             'marca': v.marca,
             'modelo': v.modelo,
             'placa': v.placa,
+            'kilometraje_actual': v.kilometraje_actual or 0,
             'estado_operativo': v.estado_operativo(),
         }
 
@@ -577,22 +582,49 @@ class ViajeSerializer(serializers.ModelSerializer):
         errors = {}
         vehiculo = data.get('vehiculo') if 'vehiculo' in data else getattr(self.instance, 'vehiculo', None)
         conductor = data.get('conductor') if 'conductor' in data else getattr(self.instance, 'conductor', None)
-        if not vehiculo:
-            errors['vehiculo'] = 'Selecciona un vehículo.'
-        if not conductor:
-            errors['conductor'] = 'Asigna un conductor responsable de este viaje.'
+        if self.instance is None:
+            if not vehiculo:
+                errors['vehiculo'] = 'Selecciona un vehículo.'
+            if not conductor:
+                errors['conductor'] = 'Asigna un conductor responsable de este viaje.'
 
-        km_inicio = data.get('kilometraje_inicio')
-        km_final = data.get('kilometraje_final')
+        # El inicio lo pone el último odómetro del vehículo. El usuario solo carga el de cierre.
+        if self.instance is None and vehiculo and data.get('kilometraje_inicio') is None:
+            data['kilometraje_inicio'] = vehiculo.kilometraje_actual or 0
+
+        km_inicio = data.get('kilometraje_inicio') if 'kilometraje_inicio' in data else getattr(self.instance, 'kilometraje_inicio', None)
         if km_inicio is None and vehiculo:
             km_inicio = vehiculo.kilometraje_actual or 0
-        if km_final is not None and km_inicio is not None and km_final < km_inicio:
-            errors['kilometraje_final'] = 'El kilometraje final no puede ser menor al inicial'
+        km_final = data.get('kilometraje_final') if 'kilometraje_final' in data else getattr(self.instance, 'kilometraje_final', None)
+        estado = data.get('estado') if 'estado' in data else getattr(self.instance, 'estado', 'programado')
+        if vehiculo and estado != 'cancelado' and km_final is None:
+            otro = Viaje.abierto_de(vehiculo, exclude_pk=getattr(self.instance, 'pk', None))
+            if otro:
+                errors['vehiculo'] = (
+                    f'El vehículo {vehiculo.placa} ya está en el viaje #{otro.pk}. '
+                    f'Cierra su odómetro o cancélalo antes de usarlo en otro viaje.'
+                )
 
-        fecha_inicio = data.get('fecha_inicio') if 'fecha_inicio' in data else getattr(self.instance, 'fecha_inicio', None)
-        fecha_fin = data.get('fecha_fin') if 'fecha_fin' in data else getattr(self.instance, 'fecha_fin', None)
-        if fecha_fin and fecha_inicio and fecha_fin < fecha_inicio:
-            errors['fecha_fin'] = 'La fecha final no puede ser menor a la inicial'
+        if (
+            self.instance
+            and 'kilometraje_final' in data
+            and (self.instance.estado == 'cancelado' or estado == 'cancelado')
+        ):
+            errors['kilometraje_final'] = 'No se puede registrar el odómetro de un viaje cancelado.'
+
+        if km_final is not None and km_final < 0:
+            errors['kilometraje_final'] = 'El odómetro no puede ser negativo.'
+        if km_final is not None and km_inicio is not None and km_final < km_inicio:
+            errors['kilometraje_final'] = (
+                f'El odómetro al finalizar no puede ser menor a {km_inicio} km '
+                f'(salida de este viaje).'
+            )
+
+        if 'fecha_fin' in data or 'fecha_inicio' in data:
+            fecha_inicio = data.get('fecha_inicio') if 'fecha_inicio' in data else getattr(self.instance, 'fecha_inicio', None)
+            fecha_fin = data.get('fecha_fin') if 'fecha_fin' in data else getattr(self.instance, 'fecha_fin', None)
+            if fecha_fin and fecha_inicio and fecha_fin < fecha_inicio:
+                errors['fecha_fin'] = 'La fecha final no puede ser menor a la inicial'
 
         if errors:
             raise serializers.ValidationError(errors)
@@ -600,7 +632,12 @@ class ViajeSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         sedes = validated_data.pop('sedes', None)
-        viaje = Viaje.objects.create(**validated_data)
+        try:
+            viaje = Viaje.objects.create(**validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError({
+                'vehiculo': 'Este vehículo ya tiene un viaje abierto.',
+            })
         if sedes:
             viaje.sedes.set(sedes)
         elif viaje.ruta:

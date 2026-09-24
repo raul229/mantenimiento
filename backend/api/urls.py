@@ -5,7 +5,7 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .api_urls import router
-from .auth_views import me, usuarios
+from .auth_views import me, usuarios_mini
 from ruta.dashboard import DashboardView
 from ruta.views import ConfiguracionEmisorView
 
@@ -14,7 +14,7 @@ urlpatterns = [
     path('api/auth/token/', TokenObtainPairView.as_view()),
     path('api/auth/refresh/', TokenRefreshView.as_view()),
     path('api/auth/me/', me),
-    path('api/usuarios/', usuarios),
+    path('api/usuarios/', usuarios_mini),
     path('api/dashboard/', DashboardView.as_view()),
     path('api/configuracion-emisor/', ConfiguracionEmisorView.as_view()),
     path('api/', include(router.urls)),

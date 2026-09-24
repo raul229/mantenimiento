@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from cuentas.models import Perfil, rol_de
 from .models import Recojo, RecojoDetalle, Viaje, ViajeGasto, Cliente, Ciudad
 from mantenimiento.models import Vehiculo
 
@@ -23,6 +24,8 @@ def _prev_month(year, month):
 
 
 class DashboardView(APIView):
+    modulo = 'dashboard'
+
     def get(self, request):
         today = timezone.now().date()
         mes_param = request.query_params.get('mes')
@@ -38,11 +41,15 @@ class DashboardView(APIView):
         prev_start, prev_end = _month_range(prev_y, prev_m)
 
         recojos = Recojo.objects.filter(fecha__gte=start, fecha__lte=end)
+        if rol_de(request.user) == Perfil.CONDUCTOR:
+            recojos = recojos.filter(viaje__conductor=request.user)
         if ciudad_id:
             recojos = recojos.filter(sede__ciudad_id=ciudad_id)
 
         kg_mes = float(recojos.aggregate(s=Sum('peso_kg'))['s'] or 0)
         prev_recojos = Recojo.objects.filter(fecha__gte=prev_start, fecha__lte=prev_end)
+        if rol_de(request.user) == Perfil.CONDUCTOR:
+            prev_recojos = prev_recojos.filter(viaje__conductor=request.user)
         if ciudad_id:
             prev_recojos = prev_recojos.filter(sede__ciudad_id=ciudad_id)
         kg_prev = float(prev_recojos.aggregate(s=Sum('peso_kg'))['s'] or 0)
@@ -51,6 +58,8 @@ class DashboardView(APIView):
             delta_pct = round(((kg_mes - kg_prev) / kg_prev) * 100, 1)
 
         viajes_hoy_qs = Viaje.objects.filter(fecha_inicio=today)
+        if rol_de(request.user) == Perfil.CONDUCTOR:
+            viajes_hoy_qs = viajes_hoy_qs.filter(conductor=request.user)
         if ciudad_id:
             viajes_hoy_qs = viajes_hoy_qs.filter(
                 Q(recojos__sede__ciudad_id=ciudad_id) | Q(ruta__sedes__ciudad_id=ciudad_id)
@@ -69,6 +78,8 @@ class DashboardView(APIView):
             viaje__fecha_inicio__gte=start,
             viaje__fecha_inicio__lte=end,
         )
+        if rol_de(request.user) == Perfil.CONDUCTOR:
+            caja = caja.filter(viaje__conductor=request.user)
         if ciudad_id:
             caja = caja.filter(
                 Q(viaje__recojos__sede__ciudad_id=ciudad_id) | Q(viaje__ruta__sedes__ciudad_id=ciudad_id)

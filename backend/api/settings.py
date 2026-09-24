@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'mantenimiento',
     'ruta',
+    'cuentas.apps.CuentasConfig',
 ]
 
 MIDDLEWARE = [
@@ -86,6 +87,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
+        'cuentas.permissions.HasModulo',
     ),
 }
 

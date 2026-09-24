@@ -152,15 +152,59 @@ class Viaje(models.Model):
     hora_retorno_est = models.TimeField(null=True, blank=True)
     observaciones = models.TextField(blank=True, default='')
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['vehiculo'],
+                condition=(
+                    models.Q(vehiculo__isnull=False)
+                    & models.Q(kilometraje_final__isnull=True)
+                    & ~models.Q(estado='cancelado')
+                ),
+                name='unique_vehiculo_viaje_abierto',
+            ),
+        ]
+
+    @classmethod
+    def abierto_de(cls, vehiculo, exclude_pk=None):
+        if not vehiculo:
+            return None
+        qs = cls.objects.exclude(estado='cancelado').filter(
+            vehiculo=vehiculo, kilometraje_final__isnull=True,
+        )
+        if exclude_pk:
+            qs = qs.exclude(pk=exclude_pk)
+        return qs.select_related('ruta').first()
+
+    @property
+    def km_recorridos(self):
+        if self.kilometraje_inicio is None or self.kilometraje_final is None:
+            return None
+        return self.kilometraje_final - self.kilometraje_inicio
+
+    def _actualizar_odometro_vehiculo(self):
+        """El último cierre del vehículo es el odómetro de salida del siguiente viaje."""
+        if self.estado == 'cancelado' or not self.vehiculo or self.kilometraje_final is None:
+            return
+        ultimo = (
+            Viaje.objects.filter(vehiculo=self.vehiculo, kilometraje_final__isnull=False)
+            .exclude(pk=self.pk)
+            .order_by('-fecha_inicio', '-id')
+            .first()
+        )
+        if ultimo and (ultimo.fecha_inicio, ultimo.pk) > (self.fecha_inicio, self.pk):
+            return
+        if self.vehiculo.kilometraje_actual != self.kilometraje_final:
+            self.vehiculo.kilometraje_actual = self.kilometraje_final
+            self.vehiculo.save(update_fields=['kilometraje_actual'])
+
     def save(self, *args, **kwargs):
         if self._state.adding and self.vehiculo and self.kilometraje_inicio is None:
             self.kilometraje_inicio = self.vehiculo.kilometraje_actual or 0
+        if self.fecha_fin and self.fecha_inicio and self.fecha_fin < self.fecha_inicio:
+            self.fecha_fin = self.fecha_inicio
         super().save(*args, **kwargs)
-
-        if self.kilometraje_final and self.vehiculo:
-            if self.kilometraje_final > (self.vehiculo.kilometraje_actual or 0):
-                self.vehiculo.kilometraje_actual = self.kilometraje_final
-                self.vehiculo.save()
+        self._actualizar_odometro_vehiculo()
 
 
 class Recojo(models.Model):
