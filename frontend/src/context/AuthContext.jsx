@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { AuthService } from "@/service/api";
-import { puede, puedeEscribir } from "@/utils/roles";
+import { puede, puedeEscribir, puedeEliminar } from "@/utils/roles";
 
 const AuthContext = createContext(null);
 
@@ -38,6 +38,11 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const reload = async () => {
+    const me = await AuthService.me();
+    setUser(me.data);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -45,9 +50,11 @@ export function AuthProvider({ children }) {
         ready,
         login,
         logout,
+        reload,
         rol: user?.rol,
-        can: (modulo) => puede(user?.rol, modulo),
-        canWrite: (modulo) => puedeEscribir(user?.rol, modulo),
+        can: (modulo) => puede(user, modulo),
+        canWrite: (modulo) => puedeEscribir(user, modulo),
+        canDelete: (modulo) => puedeEliminar(user, modulo),
       }}
     >
       {children}

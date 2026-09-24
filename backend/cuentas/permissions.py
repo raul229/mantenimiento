@@ -1,38 +1,54 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
-from .models import Perfil, rol_de
+from .models import PermisoRol, nivel_de, solo_asignados
 
-MODULOS = {
-    'dashboard': {Perfil.ADMINISTRADOR, Perfil.OPERACIONES, Perfil.CONDUCTOR},
-    'clientes': {Perfil.ADMINISTRADOR, Perfil.OPERACIONES},
-    'viajes': {Perfil.ADMINISTRADOR, Perfil.OPERACIONES, Perfil.CONDUCTOR},
-    'recojos': {Perfil.ADMINISTRADOR, Perfil.OPERACIONES, Perfil.CONDUCTOR},
-    'flota': {Perfil.ADMINISTRADOR, Perfil.OPERACIONES},
-    'emisor': {Perfil.ADMINISTRADOR, Perfil.OPERACIONES},
-    'guias': {Perfil.ADMINISTRADOR, Perfil.OPERACIONES},
-    'usuarios': {Perfil.ADMINISTRADOR},
-}
+CATALOGO_MODULOS = [
+    {'id': 'dashboard', 'label': 'Dashboard', 'escribe': False},
+    {'id': 'clientes', 'label': 'Clientes', 'escribe': True},
+    {'id': 'viajes', 'label': 'Rutas y viajes', 'escribe': True},
+    {'id': 'recojos', 'label': 'Recojos', 'escribe': True},
+    {'id': 'flota', 'label': 'Vehículos', 'escribe': True},
+    {'id': 'emisor', 'label': 'Datos de emisión', 'escribe': True},
+    {'id': 'guias', 'label': 'Guías de remisión', 'escribe': True},
+    {'id': 'usuarios', 'label': 'Usuarios y roles', 'escribe': True},
+]
 
-def puede(rol, modulo):
-    if not rol or not modulo:
-        return False
-    return rol in MODULOS.get(modulo, set())
+IDS_MODULOS = {item['id'] for item in CATALOGO_MODULOS}
+ESCRIBE_MODULOS = {item['id'] for item in CATALOGO_MODULOS if item['escribe']}
+
+
+def puede(user, modulo):
+    return nivel_de(user, modulo) in PermisoRol.NIVELES_LECTURA
+
+
+def puede_escribir(user, modulo):
+    return nivel_de(user, modulo) in PermisoRol.NIVELES_ESCRITURA
+
+
+def puede_eliminar(user, modulo):
+    return nivel_de(user, modulo) == PermisoRol.ELIMINAR
 
 
 class HasModulo(BasePermission):
-    """Si la vista define `modulo`, exige ese permiso. El conductor no crea viajes."""
+    """Si la vista define `modulo`, exige ver, editar o eliminar según el método."""
 
     def has_permission(self, request, view):
         modulo = getattr(view, 'modulo', None)
         if not modulo:
             return True
-        rol = rol_de(request.user)
-        if not puede(rol, modulo):
+        nivel = nivel_de(request.user, modulo)
+        if not nivel:
             return False
-        if rol == Perfil.CONDUCTOR and request.method not in SAFE_METHODS:
-            if modulo == 'viajes' and request.method == 'PATCH':
-                return True
-            if modulo == 'recojos' and request.method in ('POST', 'PATCH'):
-                return True
-            return False
-        return True
+        if request.method in SAFE_METHODS:
+            return True
+        if request.method == 'DELETE':
+            return nivel == PermisoRol.ELIMINAR
+        if nivel in PermisoRol.NIVELES_ESCRITURA:
+            return True
+        if (
+            modulo == 'viajes'
+            and request.method == 'PATCH'
+            and solo_asignados(request.user)
+        ):
+            return True
+        return False

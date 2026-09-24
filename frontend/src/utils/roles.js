@@ -1,28 +1,25 @@
-export const ROLES = {
-  administrador: { label: "Administrador" },
-  operaciones: { label: "Operaciones" },
-  conductor: { label: "Conductor" },
-};
+const LECTURA = new Set(["ver", "escribir", "eliminar"]);
+const ESCRITURA = new Set(["escribir", "eliminar"]);
 
-const MODULOS = {
-  dashboard: ["administrador", "operaciones", "conductor"],
-  clientes: ["administrador", "operaciones"],
-  viajes: ["administrador", "operaciones", "conductor"],
-  recojos: ["administrador", "operaciones", "conductor"],
-  flota: ["administrador", "operaciones"],
-  emisor: ["administrador", "operaciones"],
-  guias: ["administrador", "operaciones"],
-  usuarios: ["administrador"],
-};
-
-export function puede(rol, modulo) {
-  if (!rol || !modulo) return false;
-  if (rol === "administrador") return true;
-  return (MODULOS[modulo] || []).includes(rol);
+export function puede(user, modulo) {
+  return LECTURA.has(user?.permisos?.[modulo]);
 }
 
-export function puedeEscribir(rol, modulo) {
-  if (!puede(rol, modulo)) return false;
-  if (rol === "conductor") return modulo === "recojos";
-  return true;
+export function puedeEscribir(user, modulo) {
+  return ESCRITURA.has(user?.permisos?.[modulo]);
+}
+
+export function puedeEliminar(user, modulo) {
+  return user?.permisos?.[modulo] === "eliminar";
+}
+
+export function etiquetaRol(user) {
+  return user?.rol_label || user?.rol || "";
+}
+
+export function etiquetaPermiso(nivel) {
+  if (nivel === "eliminar") return "Eliminar";
+  if (nivel === "escribir") return "Editar";
+  if (nivel === "ver") return "Ver";
+  return "Sin acceso";
 }

@@ -10,7 +10,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { ROLES } from "@/utils/roles";
+import { etiquetaRol } from "@/utils/roles";
 
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, modulo: "dashboard" },
@@ -66,7 +66,7 @@ export function Sidebar() {
             </div>
             <div>
               <p className="text-sm font-medium">{user?.nombre || user?.username}</p>
-              <p className="text-xs text-white/50">{ROLES[user?.rol]?.label || "Cerrar sesión"}</p>
+              <p className="text-xs text-white/50">{etiquetaRol(user) || "Cerrar sesión"}</p>
             </div>
           </div>
           <ChevronDown size={16} className="text-white/50" />

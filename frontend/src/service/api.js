@@ -75,6 +75,10 @@ export const PersonaService = crud("/personas/");
 export const TipoResiduoService = crud("/tipos-residuo/");
 export const UsuarioService = { getAll: (params) => api.get("/usuarios/", { params }) };
 export const PersonalService = crud("/personal/");
+export const RolService = {
+  ...crud("/roles/"),
+  catalogo: () => api.get("/roles/catalogo/"),
+};
 
 export const ConfiguracionEmisorService = {
   get: () => api.get("/configuracion-emisor/"),

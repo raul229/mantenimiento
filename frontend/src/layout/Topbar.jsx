@@ -1,6 +1,6 @@
 import { Bell } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { ROLES } from "@/utils/roles";
+import { etiquetaRol } from "@/utils/roles";
 
 export function Topbar({ title, children }) {
   const { user } = useAuth();
@@ -25,7 +25,7 @@ export function Topbar({ title, children }) {
           </div>
           <div className="hidden sm:block">
             <p className="text-sm font-medium leading-none">{user?.nombre || user?.username}</p>
-            <p className="text-xs text-muted">{ROLES[user?.rol]?.label}</p>
+            <p className="text-xs text-muted">{etiquetaRol(user)}</p>
           </div>
         </div>
       </div>

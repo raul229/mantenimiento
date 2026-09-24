@@ -10,7 +10,6 @@ import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass }
 import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
 import { GuiaRemisionModal, avisarOmitidos } from "@/components/GuiaRemisionModal";
 import { ESTADO_VIAJE, formatKg, formatKm, formatMoney, formatDate, todayISO } from "@/utils/format";
-import { ROLES } from "@/utils/roles";
 import { useAuth } from "@/context/AuthContext";
 
 const emptyViaje = {
@@ -538,7 +537,7 @@ export function ViajesPage() {
             <option value="">Seleccione</option>
             {usuarios.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.nombre}{u.rol ? ` · ${ROLES[u.rol]?.label || u.rol}` : ""}
+                {u.nombre}{u.rol_label ? ` · ${u.rol_label}` : ""}
               </option>
             ))}
           </select>

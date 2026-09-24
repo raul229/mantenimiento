@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from cuentas.models import Perfil, rol_de
+from cuentas.models import solo_asignados
 from .models import Recojo, RecojoDetalle, Viaje, ViajeGasto, Cliente, Ciudad
 from mantenimiento.models import Vehiculo
 
@@ -41,14 +41,14 @@ class DashboardView(APIView):
         prev_start, prev_end = _month_range(prev_y, prev_m)
 
         recojos = Recojo.objects.filter(fecha__gte=start, fecha__lte=end)
-        if rol_de(request.user) == Perfil.CONDUCTOR:
+        if solo_asignados(request.user):
             recojos = recojos.filter(viaje__conductor=request.user)
         if ciudad_id:
             recojos = recojos.filter(sede__ciudad_id=ciudad_id)
 
         kg_mes = float(recojos.aggregate(s=Sum('peso_kg'))['s'] or 0)
         prev_recojos = Recojo.objects.filter(fecha__gte=prev_start, fecha__lte=prev_end)
-        if rol_de(request.user) == Perfil.CONDUCTOR:
+        if solo_asignados(request.user):
             prev_recojos = prev_recojos.filter(viaje__conductor=request.user)
         if ciudad_id:
             prev_recojos = prev_recojos.filter(sede__ciudad_id=ciudad_id)
@@ -58,7 +58,7 @@ class DashboardView(APIView):
             delta_pct = round(((kg_mes - kg_prev) / kg_prev) * 100, 1)
 
         viajes_hoy_qs = Viaje.objects.filter(fecha_inicio=today)
-        if rol_de(request.user) == Perfil.CONDUCTOR:
+        if solo_asignados(request.user):
             viajes_hoy_qs = viajes_hoy_qs.filter(conductor=request.user)
         if ciudad_id:
             viajes_hoy_qs = viajes_hoy_qs.filter(
@@ -78,7 +78,7 @@ class DashboardView(APIView):
             viaje__fecha_inicio__gte=start,
             viaje__fecha_inicio__lte=end,
         )
-        if rol_de(request.user) == Perfil.CONDUCTOR:
+        if solo_asignados(request.user):
             caja = caja.filter(viaje__conductor=request.user)
         if ciudad_id:
             caja = caja.filter(

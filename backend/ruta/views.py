@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Q
 from django.http import HttpResponse
-from cuentas.models import Perfil, rol_de
+from cuentas.models import solo_asignados
 from .models import (
     Ciudad, Cliente, Sede, Ruta, Viaje, Recojo, Celular, Persona,
     TipoResiduo, RecojoDetalle, ViajeGasto,
@@ -86,12 +86,12 @@ class ViajeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        if rol_de(self.request.user) == Perfil.CONDUCTOR:
+        if solo_asignados(self.request.user):
             qs = qs.filter(conductor=self.request.user)
         return qs
 
     def _conductor_solo_odometro(self, request):
-        if rol_de(request.user) != Perfil.CONDUCTOR:
+        if not solo_asignados(request.user):
             return None
         if set(request.data.keys()) - {'kilometraje_final'}:
             return Response(
@@ -125,7 +125,7 @@ class RecojoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        if rol_de(self.request.user) == Perfil.CONDUCTOR:
+        if solo_asignados(self.request.user):
             qs = qs.filter(viaje__conductor=self.request.user)
         return qs
 
