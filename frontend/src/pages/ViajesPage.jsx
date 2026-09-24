@@ -9,7 +9,9 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass } from "@/components/Modal";
 import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
 import { GuiaRemisionModal, avisarOmitidos } from "@/components/GuiaRemisionModal";
-import { ESTADO_VIAJE, formatKg, formatMoney, formatDate, todayISO } from "@/utils/format";
+import { ESTADO_VIAJE, formatKg, formatKm, formatMoney, formatDate, todayISO } from "@/utils/format";
+import { ROLES } from "@/utils/roles";
+import { useAuth } from "@/context/AuthContext";
 
 const emptyViaje = {
   vehiculo: "",
@@ -23,6 +25,7 @@ const emptyViaje = {
 const emptyRuta = { nombre: "", descripcion: "", sedes: [] };
 
 export function ViajesPage() {
+  const { canWrite, can } = useAuth();
   const [tab, setTab] = useState("viajes");
   const [viajes, setViajes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
@@ -45,17 +48,20 @@ export function ViajesPage() {
   const [sedeToAdd, setSedeToAdd] = useState("");
   const [guiaViaje, setGuiaViaje] = useState(null);
   const [emitiendo, setEmitiendo] = useState(false);
+  const [kmRetorno, setKmRetorno] = useState("");
+  const [guardandoKm, setGuardandoKm] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
+      const vacio = { data: [] };
       const [v, ve, r, u, c, s] = await Promise.all([
         ViajeService.getAll(),
-        VehiculoService.getAll(),
+        canWrite("viajes") ? VehiculoService.getAll() : Promise.resolve(vacio),
         RutaService.getAll(),
-        UsuarioService.getAll(),
+        canWrite("viajes") ? UsuarioService.getAll() : Promise.resolve(vacio),
         CiudadService.getAll(),
-        SedeService.getAll(),
+        canWrite("viajes") ? SedeService.getAll() : Promise.resolve(vacio),
       ]);
       setViajes(v.data);
       setVehiculos(ve.data);
@@ -88,12 +94,27 @@ export function ViajesPage() {
       done: list.filter((v) => v.estado === "completado").length,
       pend: list.filter((v) => v.estado === "programado").length,
       kg: list.reduce((s, v) => s + Number(v.kg_total || 0), 0),
+      km: list.reduce((s, v) => s + Number(v.km_recorridos || 0), 0),
     };
   }, [viajes, fecha]);
 
   const selected = viajes.find((v) => v.id === selectedId) || null;
   const selectedRuta = rutas.find((r) => r.id === rutaId) || null;
   const recojoPorSede = Object.fromEntries((selected?.recojos || []).map((r) => [r.sede, r]));
+  const viajeAbiertoPorVehiculo = useMemo(() => {
+    const mapa = {};
+    for (const v of viajes) {
+      if (v.estado === "cancelado" || v.kilometraje_final != null || !v.vehiculo) continue;
+      mapa[v.vehiculo] = v;
+    }
+    return mapa;
+  }, [viajes]);
+  const vehiculosLibres = vehiculos.filter((v) => !viajeAbiertoPorVehiculo[v.id]);
+
+  useEffect(() => {
+    if (!selected) return;
+    setKmRetorno(selected.kilometraje_final != null ? String(selected.kilometraje_final) : "");
+  }, [selectedId, selected?.kilometraje_final]);
 
   // Emite las guías de todos los recojos del viaje y abre la vista previa del lote.
   const emitirGuiasViaje = async (viajeId) => {
@@ -134,9 +155,29 @@ export function ViajesPage() {
       setForm({ ...emptyViaje, fecha_inicio: todayISO() });
       load();
     } catch (err) {
-      const data = err?.response?.data;
-      const msg = data?.conductor?.[0] || data?.vehiculo?.[0] || "No se pudo crear el viaje";
-      toast.error(msg);
+      toast.error(mensajeApi(err, "No se pudo crear el viaje"));
+    }
+  };
+
+  const guardarOdometro = async () => {
+    if (!selected) return;
+    if (selected.estado === "cancelado") {
+      toast.error("No se puede registrar el odómetro de un viaje cancelado");
+      return;
+    }
+    if (kmRetorno === "" || Number(kmRetorno) < 0) {
+      toast.error("Indica el odómetro al finalizar el viaje");
+      return;
+    }
+    setGuardandoKm(true);
+    try {
+      await ViajeService.patch(selected.id, { kilometraje_final: Number(kmRetorno) });
+      toast.success("Odómetro de cierre registrado");
+      load();
+    } catch (err) {
+      toast.error(mensajeApi(err, "No se pudo guardar el odómetro"));
+    } finally {
+      setGuardandoKm(false);
     }
   };
 
@@ -211,6 +252,7 @@ export function ViajesPage() {
       },
     },
     { header: "Kg", render: (v) => formatKg(v.kg_total) },
+    { header: "Km", render: (v) => formatKm(v.km_recorridos) },
   ];
 
   const rutaColumns = [
@@ -231,15 +273,17 @@ export function ViajesPage() {
             <button type="button" className={`btn btn-sm rounded-full ${tab === "viajes" ? "btn-primary" : "btn-ghost bg-base-100"}`} onClick={() => setTab("viajes")}>
               Viajes
             </button>
+            {canWrite("viajes") && (
             <button type="button" className={`btn btn-sm rounded-full ${tab === "rutas" ? "btn-primary" : "btn-ghost bg-base-100"}`} onClick={() => setTab("rutas")}>
               Rutas
             </button>
-            {tab === "viajes" && (
+            )}
+            {tab === "viajes" && canWrite("viajes") && (
               <button type="button" onClick={() => setModalViaje(true)} className="btn btn-primary ml-auto">
                 <Plus size={16} /> Nuevo viaje
               </button>
             )}
-            {tab === "rutas" && (
+            {tab === "rutas" && canWrite("viajes") && (
               <button
                 type="button"
                 onClick={() => { setRutaForm(emptyRuta); setModalRuta(true); }}
@@ -259,7 +303,7 @@ export function ViajesPage() {
                   onChange={setCiudad}
                   ciudades={ciudades}
                   placeholder="Ciudad"
-                  onNueva={() => setModalCiudad(true)}
+                  onNueva={canWrite("viajes") ? () => setModalCiudad(true) : undefined}
                 />
                 <input type="date" className={`${filterClass} w-40`} value={fecha} onChange={(e) => setFecha(e.target.value)} />
                 <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
@@ -273,12 +317,13 @@ export function ViajesPage() {
                   <input className={`${filterClass} w-48 pl-9`} placeholder="Buscar ruta, placa o conductor" value={q} onChange={(e) => setQ(e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-6 gap-3">
                 <Mini n={kpis.total} label="viajes" />
                 <Mini n={kpis.curso} label="en proceso" />
                 <Mini n={kpis.done} label="completados" />
                 <Mini n={kpis.pend} label="pendientes" />
                 <Mini n={formatKg(kpis.kg)} label="recolectados" />
+                <Mini n={formatKm(kpis.km)} label="recorridos" />
               </div>
               <DataTable
                 columns={columns}
@@ -314,6 +359,41 @@ export function ViajesPage() {
             <Row label="Ciudad" value={selected.ciudad || "—"} />
             <Row label="Salida" value={selected.hora_salida || "—"} />
             <Row label="Fecha" value={formatDate(selected.fecha_inicio)} />
+            <Row label="Odómetro de salida" value={formatKm(selected.kilometraje_inicio)} />
+            <Row label="Km recorridos" value={formatKm(selected.km_recorridos)} />
+
+            <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Odómetro al finalizar</h3>
+            {selected.estado === "cancelado" ? (
+              <p className="text-sm text-muted">Este viaje está cancelado. El odómetro no se puede modificar.</p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-muted">
+                  Esta lectura queda como salida del próximo viaje de {selected.vehiculo_data?.placa || "este vehículo"}.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min={selected.kilometraje_inicio ?? 0}
+                    className={inputClass}
+                    value={kmRetorno}
+                    onChange={(e) => setKmRetorno(e.target.value)}
+                    placeholder={
+                      selected.kilometraje_inicio != null
+                        ? `≥ ${selected.kilometraje_inicio}`
+                        : "Lectura del tablero"
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={guardandoKm}
+                    onClick={guardarOdometro}
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </>
+            )}
 
             <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">
               Progreso {selected.paradas_hechas}/{selected.paradas_total} sedes
@@ -339,17 +419,18 @@ export function ViajesPage() {
                     <span className="flex items-center gap-1">
                       {recojo
                         ? <span className="badge badge-success">Con recojo</span>
-                        : (
+                        : canWrite("viajes") ? (
                           <button type="button" className="btn btn-ghost btn-xs" onClick={() => removeSedeViaje(s.id)} title="Quitar sede">
                             <X size={14} />
                           </button>
-                        )}
+                        ) : null}
                     </span>
                   </li>
                 );
               })}
               {!(selected.sedes_data || []).length && <p className="text-sm text-muted">Sin sedes. Agrégalas abajo o asocia una ruta.</p>}
             </ol>
+            {canWrite("viajes") && (
             <div className="mt-3 flex gap-2">
               <select className={selectClass} value={sedeToAdd} onChange={(e) => setSedeToAdd(e.target.value)}>
                 <option value="">Agregar sede</option>
@@ -359,6 +440,7 @@ export function ViajesPage() {
               </select>
               <button type="button" className="btn btn-outline" onClick={addSedeViaje} disabled={!sedeToAdd}>Añadir</button>
             </div>
+            )}
 
             <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Costos del viaje</h3>
             {gastos.map((g) => (
@@ -367,6 +449,7 @@ export function ViajesPage() {
             <Row label="Total" value={formatMoney(selected.costo_total)} />
             {!gastos.length && <p className="text-sm text-muted">Sin gastos registrados</p>}
 
+            {can("guias") && (
             <button
               type="button"
               disabled={emitiendo || !selected.paradas_hechas}
@@ -375,6 +458,7 @@ export function ViajesPage() {
             >
               <FileText size={16} /> Guías de toda la ruta
             </button>
+            )}
             {!selected.paradas_hechas && (
               <p className="mt-2 text-xs text-muted">
                 Aún no hay recojos registrados en este viaje.
@@ -432,13 +516,31 @@ export function ViajesPage() {
         <Field label="Vehículo">
           <select className={selectClass} value={form.vehiculo} onChange={(e) => setForm({ ...form, vehiculo: e.target.value })}>
             <option value="">Seleccione</option>
-            {vehiculos.map((v) => <option key={v.id} value={v.id}>{v.placa} · {v.marca}</option>)}
+            {vehiculosLibres.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.placa} · {v.marca} · sale con {formatKm(v.kilometraje_actual)}
+              </option>
+            ))}
           </select>
         </Field>
+        {!vehiculosLibres.length && (
+          <p className="text-sm text-warning">
+            Todos los vehículos tienen un viaje abierto. Cierra el odómetro o cancela ese viaje para liberar el carro.
+          </p>
+        )}
+        {!!Object.keys(viajeAbiertoPorVehiculo).length && vehiculosLibres.length > 0 && (
+          <p className="text-xs text-muted">
+            No aparecen las unidades que aún no han cerrado odómetro.
+          </p>
+        )}
         <Field label="Conductor responsable">
           <select className={selectClass} value={form.conductor} onChange={(e) => setForm({ ...form, conductor: e.target.value })}>
             <option value="">Seleccione</option>
-            {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+            {usuarios.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nombre}{u.rol ? ` · ${ROLES[u.rol]?.label || u.rol}` : ""}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Fecha">
@@ -508,4 +610,13 @@ function Row({ label, value }) {
       <span className="font-medium">{value}</span>
     </div>
   );
+}
+
+function mensajeApi(err, fallback) {
+  const data = err?.response?.data;
+  if (!data) return fallback;
+  if (typeof data.detail === "string") return data.detail;
+  if (Array.isArray(data.detail)) return data.detail[0];
+  const primero = Object.values(data).flat()[0];
+  return typeof primero === "string" ? primero : fallback;
 }

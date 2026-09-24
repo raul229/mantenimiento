@@ -10,10 +10,12 @@ import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass }
 import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
 import { GuiaRemisionModal, avisarOmitidos } from "@/components/GuiaRemisionModal";
 import { ESTADO_RECOJO, formatDate, formatTime, formatKg, formatKgPrecise, monthISO } from "@/utils/format";
+import { useAuth } from "@/context/AuthContext";
 
 const VIAJE_EN_PROCESO = new Set(["programado", "en curso"]);
 
 export function RecojosPage() {
+  const { can } = useAuth();
   const [recojos, setRecojos] = useState([]);
   const [viajes, setViajes] = useState([]);
   const [ciudades, setCiudades] = useState([]);
@@ -231,7 +233,7 @@ export function RecojosPage() {
               onChange={setCiudad}
               ciudades={ciudades}
               placeholder="Ciudad"
-              onNueva={() => setModalCiudad(true)}
+              onNueva={can("clientes") ? () => setModalCiudad(true) : undefined}
             />
             <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
               <option value="">Estado</option>
@@ -242,6 +244,7 @@ export function RecojosPage() {
               <Search size={16} className="absolute left-3 top-2.5 text-muted" />
               <input className={`${filterClass} w-52 pl-9`} placeholder="Cliente, sede o ruta" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
+            {can("guias") && (
             <button
               type="button"
               disabled={!seleccion.length || emitiendo}
@@ -253,7 +256,8 @@ export function RecojosPage() {
                 ? `Guías de ${seleccion.length} recojos`
                 : "Guía de remisión"}
             </button>
-            <button type="button" onClick={openNew} className="btn btn-primary">
+            )}
+            <button type="button" onClick={openNew} className={`btn btn-primary ${can("guias") ? "" : "ml-auto"}`}>
               <Plus size={16} /> Nuevo recojo
             </button>
           </div>
@@ -305,6 +309,7 @@ export function RecojosPage() {
             <button type="button" disabled={saving} onClick={savePeso} className="btn btn-primary mt-4 w-full">
               Guardar kg
             </button>
+            {can("guias") && (
             <button
               type="button"
               disabled={emitiendo}
@@ -314,6 +319,7 @@ export function RecojosPage() {
               <FileText size={16} />
               {selected.guia_numero ? "Ver guía de remisión" : "Emitir guía de remisión"}
             </button>
+            )}
           </DetailPanel>
         )}
       </div>

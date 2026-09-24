@@ -64,6 +64,7 @@ export function FlotaPage() {
       const payload = {
         ...form,
         anio: form.anio ? Number(form.anio) : null,
+        kilometraje_actual: Number(form.kilometraje_actual) || 0,
       };
       await VehiculoService.create(payload);
       toast.success("Vehículo creado");
@@ -224,6 +225,15 @@ export function FlotaPage() {
         <Field label="Modelo"><input className={inputClass} value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} /></Field>
         <Field label="Placa"><input className={inputClass} value={form.placa} onChange={(e) => setForm({ ...form, placa: e.target.value })} /></Field>
         <Field label="Año"><input className={inputClass} type="number" value={form.anio} onChange={(e) => setForm({ ...form, anio: e.target.value })} /></Field>
+        <Field label="Kilometraje actual (odómetro)">
+          <input
+            className={inputClass}
+            type="number"
+            min="0"
+            value={form.kilometraje_actual}
+            onChange={(e) => setForm({ ...form, kilometraje_actual: e.target.value })}
+          />
+        </Field>
       </Modal>
     </>
   );
