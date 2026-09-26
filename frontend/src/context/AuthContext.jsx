@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AuthService } from "@/service/api";
 import { puede, puedeEscribir, puedeEliminar } from "@/utils/roles";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
@@ -36,6 +38,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("sermin_access");
     localStorage.removeItem("sermin_refresh");
     setUser(null);
+    queryClient.clear();
   };
 
   const reload = async () => {

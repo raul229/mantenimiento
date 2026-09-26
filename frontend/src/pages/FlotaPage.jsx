@@ -8,12 +8,17 @@ import {
 import { Topbar } from "@/layout/Topbar";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Modal, Field, inputClass } from "@/components/Modal";
+import { Modal } from "@/components/Modal";
 import { ESTADO_FLOTA, ESTADO_SERVICIO, formatKm } from "@/utils/format";
 import { useAuth } from "@/context/AuthContext";
 import { FallasTab } from "@/pages/flota/FallasTab";
 import { OrdenesTab } from "@/pages/flota/OrdenesTab";
 import { PreventivosTab } from "@/pages/flota/PreventivosTab";
+import { useApiList, useInvalidate } from "@/hooks/useApiQuery";
+import { qk } from "@/query/keys";
+import { TextField } from "@/components/AppForm";
+import { useAppForm } from "@/hooks/useAppForm";
+import { vehiculoSchema } from "@/forms/schemas";
 
 const emptyForm = {
   marca: "",
@@ -31,44 +36,79 @@ export function FlotaPage() {
   const puedeTaller = canWrite("flota") && !user?.solo_asignados;
   const puedeReportar = canWrite("flota");
 
+  const invalidate = useInvalidate();
   const [tab, setTab] = useState("flota");
-  const [vehiculos, setVehiculos] = useState([]);
-  const [mantenimientos, setMantenimientos] = useState([]);
-  const [documentos, setDocumentos] = useState([]);
-  const [fallas, setFallas] = useState([]);
-  const [tiposFalla, setTiposFalla] = useState([]);
-  const [tiposServicio, setTiposServicio] = useState([]);
-  const [servicios, setServicios] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState(null);
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState(emptyForm);
   const [q, setQ] = useState("");
 
-  const load = () => {
-    setLoading(true);
-    Promise.all([
-      VehiculoService.getAll(),
-      MantenimientoService.getAll(),
-      DocumentoService.getAll({ tipo_entidad: "vehiculo" }),
-      FallaService.getAll(),
-      TipoFallaService.getAll(),
-      TipoServicioService.getAll(),
-      ServicioVehiculoService.getAll(),
-    ])
-      .then(([v, m, d, f, tf, ts, sv]) => {
-        setVehiculos(v.data);
-        setMantenimientos(m.data);
-        setDocumentos(d.data);
-        setFallas(f.data);
-        setTiposFalla(tf.data);
-        setTiposServicio(ts.data);
-        setServicios(sv.data);
-      })
-      .finally(() => setLoading(false));
-  };
+  const { data: vehiculos = [], isLoading: loadingFlota } = useApiList(qk.vehiculos, () => VehiculoService.getAll());
+  const { data: mantenimientos = [], isLoading: loadingOrdenes } = useApiList(
+    qk.mantenimientos,
+    () => MantenimientoService.getAll(),
+    { enabled: tab === "flota" || tab === "ordenes" },
+  );
+  const { data: documentos = [] } = useApiList(
+    qk.documentos({ tipo_entidad: "vehiculo" }),
+    () => DocumentoService.getAll({ tipo_entidad: "vehiculo" }),
+    { enabled: tab === "flota" || tab === "documentos" },
+  );
+  const { data: fallas = [], isLoading: loadingFallas } = useApiList(
+    qk.fallas,
+    () => FallaService.getAll(),
+    { enabled: tab === "fallas" || tab === "ordenes" },
+  );
+  const { data: tiposFalla = [] } = useApiList(qk.tiposFalla, () => TipoFallaService.getAll(), { enabled: tab === "fallas" });
+  const { data: tiposServicio = [] } = useApiList(
+    qk.tiposServicio,
+    () => TipoServicioService.getAll(),
+    { enabled: tab === "ordenes" || tab === "preventivos" },
+  );
+  const { data: servicios = [], isLoading: loadingPrev } = useApiList(
+    qk.servicios,
+    () => ServicioVehiculoService.getAll(),
+    { enabled: tab === "flota" || tab === "preventivos" },
+  );
+  const selected = vehiculos.find((v) => v.id === selectedId) || null;
+  const loading = tab === "flota" ? loadingFlota : tab === "fallas" ? loadingFallas : tab === "ordenes" ? loadingOrdenes : tab === "preventivos" ? loadingPrev : false;
 
-  useEffect(() => { load(); }, []);
+  const recargar = () => invalidate(
+    qk.vehiculos,
+    qk.mantenimientos,
+    qk.fallas,
+    qk.servicios,
+    qk.tiposFalla,
+    qk.tiposServicio,
+    qk.documentos({ tipo_entidad: "vehiculo" }),
+    qk.notificaciones,
+  );
+
+  const form = useAppForm({
+    defaultValues: emptyForm,
+    schema: vehiculoSchema,
+    onSubmit: async (value) => {
+      try {
+        await VehiculoService.create({
+          ...value,
+          anio: value.anio ? Number(value.anio) : null,
+          kilometraje_actual: Number(value.kilometraje_actual) || 0,
+          tipo: "furgon",
+          estado: "activo",
+          nivel_combustible: 50,
+        });
+        toast.success("Vehículo creado");
+        setModal(false);
+        form.reset(emptyForm);
+        recargar();
+      } catch {
+        toast.error("No se pudo crear el vehículo");
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (modal) form.reset(emptyForm);
+  }, [modal]);
 
   const stats = useMemo(() => {
     const ops = { total: vehiculos.length, operativos: 0, en_taller: 0, detenido: 0, fallas: 0 };
@@ -85,21 +125,9 @@ export function FlotaPage() {
   const mantsOf = (vehiculo) => mantenimientos.filter((m) => m.vehiculo?.id === vehiculo?.id);
   const preventivosOf = (vehiculo) => (vehiculo?.preventivos || servicios.filter((s) => s.vehiculo?.id === vehiculo?.id));
 
-  const save = async () => {
-    try {
-      const payload = {
-        ...form,
-        anio: form.anio ? Number(form.anio) : null,
-        kilometraje_actual: Number(form.kilometraje_actual) || 0,
-      };
-      await VehiculoService.create(payload);
-      toast.success("Vehículo creado");
-      setModal(false);
-      setForm(emptyForm);
-      load();
-    } catch {
-      toast.error("No se pudo crear el vehículo");
-    }
+  const openVehiculo = () => {
+    form.reset(emptyForm);
+    setModal(true);
   };
 
   const tabs = [
@@ -126,7 +154,7 @@ export function FlotaPage() {
             </button>
           ))}
           {tab === "flota" && puedeTaller && (
-            <button type="button" onClick={() => setModal(true)} className="btn btn-primary ml-auto">
+            <button type="button" onClick={openVehiculo} className="btn btn-primary ml-auto">
               <Plus size={16} /> Nuevo vehículo
             </button>
           )}
@@ -146,7 +174,7 @@ export function FlotaPage() {
                 <button
                   type="button"
                   key={v.id}
-                  onClick={() => setSelected(v)}
+                  onClick={() => setSelectedId(v.id)}
                   className={`flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-sm ${selected?.id === v.id ? "ring-2 ring-accent" : ""}`}
                 >
                   <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-muted">
@@ -172,7 +200,7 @@ export function FlotaPage() {
                 title={selected.placa}
                 subtitle={`${selected.marca} ${selected.modelo}`}
                 badge={<StatusBadge map={ESTADO_FLOTA} value={selected.estado_operativo} />}
-                onClose={() => setSelected(null)}
+                onClose={() => setSelectedId(null)}
               >
                 <Row label="Tipo" value={selected.tipo} />
                 <Row label="Año" value={selected.anio || "—"} />
@@ -212,7 +240,7 @@ export function FlotaPage() {
             loading={loading}
             puedeTaller={puedeTaller}
             puedeReportar={puedeReportar}
-            onReload={load}
+            onReload={recargar}
             q={q}
             setQ={setQ}
           />
@@ -225,7 +253,7 @@ export function FlotaPage() {
             tiposServicio={tiposServicio}
             loading={loading}
             puedeTaller={puedeTaller}
-            onReload={load}
+            onReload={recargar}
             q={q}
             setQ={setQ}
           />
@@ -237,7 +265,7 @@ export function FlotaPage() {
             vehiculos={vehiculos}
             loading={loading}
             puedeTaller={puedeTaller}
-            onReload={load}
+            onReload={recargar}
             q={q}
             setQ={setQ}
           />
@@ -271,20 +299,12 @@ export function FlotaPage() {
           </div>
         )}
       </div>
-      <Modal open={modal} title="Nuevo vehículo" onClose={() => setModal(false)} onSubmit={save}>
-        <Field label="Marca"><input className={inputClass} value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} /></Field>
-        <Field label="Modelo"><input className={inputClass} value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} /></Field>
-        <Field label="Placa"><input className={inputClass} value={form.placa} onChange={(e) => setForm({ ...form, placa: e.target.value })} /></Field>
-        <Field label="Año"><input className={inputClass} type="number" value={form.anio} onChange={(e) => setForm({ ...form, anio: e.target.value })} /></Field>
-        <Field label="Kilometraje actual (odómetro)">
-          <input
-            className={inputClass}
-            type="number"
-            min="0"
-            value={form.kilometraje_actual}
-            onChange={(e) => setForm({ ...form, kilometraje_actual: e.target.value })}
-          />
-        </Field>
+      <Modal open={modal} title="Nuevo vehículo" onClose={() => setModal(false)} onSubmit={() => form.handleSubmit()}>
+        <TextField form={form} name="marca" label="Marca" />
+        <TextField form={form} name="modelo" label="Modelo" />
+        <TextField form={form} name="placa" label="Placa" />
+        <TextField form={form} name="anio" label="Año" type="number" />
+        <TextField form={form} name="kilometraje_actual" label="Kilometraje actual (odómetro)" type="number" min="0" />
       </Modal>
     </>
   );

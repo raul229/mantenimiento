@@ -8,10 +8,15 @@ import { DataTable } from "@/components/DataTable";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass } from "@/components/Modal";
-import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
+import { CiudadFields, NuevaCiudadModal } from "@/components/CiudadSelect";
 import { GuiaRemisionModal, avisarOmitidos } from "@/components/GuiaRemisionModal";
 import { ESTADO_VIAJE, formatKg, formatKm, formatMoney, formatDate, todayISO } from "@/utils/format";
 import { useAuth } from "@/context/AuthContext";
+import { useApiList, useInvalidate } from "@/hooks/useApiQuery";
+import { qk } from "@/query/keys";
+import { TextField, SelectField } from "@/components/AppForm";
+import { useAppForm } from "@/hooks/useAppForm";
+import { viajeSchema, rutaSchema } from "@/forms/schemas";
 
 const emptyViaje = {
   vehiculo: "",
@@ -27,14 +32,15 @@ const emptyRuta = { nombre: "", descripcion: "", sedes: [] };
 export function ViajesPage() {
   const { canWrite, can } = useAuth();
   const navigate = useNavigate();
+  const invalidate = useInvalidate();
+  const escribe = canWrite("viajes");
   const [tab, setTab] = useState("viajes");
-  const [viajes, setViajes] = useState([]);
-  const [vehiculos, setVehiculos] = useState([]);
-  const [rutas, setRutas] = useState([]);
-  const [usuarios, setUsuarios] = useState([]);
-  const [ciudades, setCiudades] = useState([]);
-  const [sedes, setSedes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: viajes = [], isLoading: loading } = useApiList(qk.viajes, () => ViajeService.getAll());
+  const { data: vehiculos = [] } = useApiList(qk.vehiculos, () => VehiculoService.getAll(), { enabled: escribe });
+  const { data: rutas = [] } = useApiList(qk.rutas, () => RutaService.getAll());
+  const { data: usuarios = [] } = useApiList(qk.usuarios, () => UsuarioService.getAll(), { enabled: escribe });
+  const { data: ciudades = [] } = useApiList(qk.ciudades, () => CiudadService.getAll());
+  const { data: sedes = [] } = useApiList(qk.sedes, () => SedeService.getAll(), { enabled: escribe });
   const [selectedId, setSelectedId] = useState(null);
   const [rutaId, setRutaId] = useState(null);
   const [q, setQ] = useState("");
@@ -44,7 +50,6 @@ export function ViajesPage() {
   const [modalViaje, setModalViaje] = useState(false);
   const [modalRuta, setModalRuta] = useState(false);
   const [modalCiudad, setModalCiudad] = useState(false);
-  const [form, setForm] = useState(emptyViaje);
   const [rutaForm, setRutaForm] = useState(emptyRuta);
   const [sedeToAdd, setSedeToAdd] = useState("");
   const [guiaViaje, setGuiaViaje] = useState(null);
@@ -52,30 +57,34 @@ export function ViajesPage() {
   const [kmRetorno, setKmRetorno] = useState("");
   const [guardandoKm, setGuardandoKm] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const vacio = { data: [] };
-      const [v, ve, r, u, c, s] = await Promise.all([
-        ViajeService.getAll(),
-        canWrite("viajes") ? VehiculoService.getAll() : Promise.resolve(vacio),
-        RutaService.getAll(),
-        canWrite("viajes") ? UsuarioService.getAll() : Promise.resolve(vacio),
-        CiudadService.getAll(),
-        canWrite("viajes") ? SedeService.getAll() : Promise.resolve(vacio),
-      ]);
-      setViajes(v.data);
-      setVehiculos(ve.data);
-      setRutas(r.data);
-      setUsuarios(u.data);
-      setCiudades(asCiudades(c.data));
-      setSedes(s.data);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const recargarViajes = () => invalidate(qk.viajes, qk.rutas, qk.vehiculos);
 
-  useEffect(() => { load(); }, []);
+  const viajeForm = useAppForm({
+    defaultValues: { ...emptyViaje, fecha_inicio: todayISO() },
+    schema: viajeSchema,
+    onSubmit: async (value) => {
+      try {
+        await ViajeService.create({
+          vehiculo: value.vehiculo,
+          conductor: value.conductor,
+          ruta: value.ruta || null,
+          fecha_inicio: value.fecha_inicio,
+          estado: "programado",
+          hora_salida: value.hora_salida || null,
+        });
+        toast.success("Viaje creado con las sedes de la ruta");
+        setModalViaje(false);
+        viajeForm.reset({ ...emptyViaje, fecha_inicio: todayISO() });
+        recargarViajes();
+      } catch (err) {
+        toast.error(mensajeApi(err, "No se pudo crear el viaje"));
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (modalViaje) viajeForm.reset({ ...emptyViaje, fecha_inicio: todayISO() });
+  }, [modalViaje]);
 
   const filtered = useMemo(() => {
     return viajes.filter((v) => {
@@ -127,36 +136,13 @@ export function ViajesPage() {
       }
       avisarOmitidos(data.omitidos);
       setGuiaViaje(viajeId);
-      load();
+      recargarViajes();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "No se pudieron emitir las guías", {
         duration: 7000,
       });
     } finally {
       setEmitiendo(false);
-    }
-  };
-
-  const saveViaje = async () => {
-    if (!form.vehiculo || !form.conductor) {
-      toast.error("Asigna vehículo y conductor");
-      return;
-    }
-    try {
-      await ViajeService.create({
-        vehiculo: form.vehiculo,
-        conductor: form.conductor,
-        ruta: form.ruta || null,
-        fecha_inicio: form.fecha_inicio,
-        estado: form.estado,
-        hora_salida: form.hora_salida || null,
-      });
-      toast.success("Viaje creado con las sedes de la ruta");
-      setModalViaje(false);
-      setForm({ ...emptyViaje, fecha_inicio: todayISO() });
-      load();
-    } catch (err) {
-      toast.error(mensajeApi(err, "No se pudo crear el viaje"));
     }
   };
 
@@ -174,7 +160,7 @@ export function ViajesPage() {
     try {
       await ViajeService.patch(selected.id, { kilometraje_final: Number(kmRetorno) });
       toast.success("Odómetro de cierre registrado");
-      load();
+      recargarViajes();
     } catch (err) {
       toast.error(mensajeApi(err, "No se pudo guardar el odómetro"));
     } finally {
@@ -183,8 +169,13 @@ export function ViajesPage() {
   };
 
   const saveRuta = async () => {
-    if (!rutaForm.nombre.trim()) {
-      toast.error("Indica el nombre de la ruta");
+    const parsed = rutaSchema.safeParse({
+      nombre: rutaForm.nombre,
+      descripcion: rutaForm.descripcion,
+      sedes: rutaForm.sedes.map(Number),
+    });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message || "Revisa la ruta");
       return;
     }
     try {
@@ -198,7 +189,7 @@ export function ViajesPage() {
       }
       setModalRuta(false);
       setRutaForm(emptyRuta);
-      load();
+      recargarViajes();
     } catch {
       toast.error("No se pudo guardar la ruta");
     }
@@ -208,7 +199,7 @@ export function ViajesPage() {
     if (!selected) return;
     try {
       await ViajeService.patch(selected.id, { sedes: nextIds });
-      load();
+      recargarViajes();
     } catch {
       toast.error("No se pudieron actualizar las sedes del viaje");
     }
@@ -515,27 +506,23 @@ export function ViajesPage() {
         )}
       </div>
 
-      <Modal open={modalViaje} title="Nuevo viaje" onClose={() => setModalViaje(false)} onSubmit={saveViaje}>
-        <Field label="Ruta">
-          <select className={selectClass} value={form.ruta} onChange={(e) => setForm({ ...form, ruta: e.target.value })}>
-            <option value="">Sin ruta (agregar sedes después)</option>
-            {rutas.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.nombre} · {r.sedes_count ?? (r.sedes_data || []).length} sedes
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Vehículo">
-          <select className={selectClass} value={form.vehiculo} onChange={(e) => setForm({ ...form, vehiculo: e.target.value })}>
-            <option value="">Seleccione</option>
-            {vehiculosLibres.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.placa} · {v.marca} · sale con {formatKm(v.kilometraje_actual)}
-              </option>
-            ))}
-          </select>
-        </Field>
+      <Modal open={modalViaje} title="Nuevo viaje" onClose={() => setModalViaje(false)} onSubmit={() => viajeForm.handleSubmit()}>
+        <SelectField form={viajeForm} name="ruta" label="Ruta">
+          <option value="">Sin ruta (agregar sedes después)</option>
+          {rutas.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.nombre} · {r.sedes_count ?? (r.sedes_data || []).length} sedes
+            </option>
+          ))}
+        </SelectField>
+        <SelectField form={viajeForm} name="vehiculo" label="Vehículo">
+          <option value="">Seleccione</option>
+          {vehiculosLibres.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.placa} · {v.marca} · sale con {formatKm(v.kilometraje_actual)}
+            </option>
+          ))}
+        </SelectField>
         {!vehiculosLibres.length && (
           <p className="text-sm text-warning">
             Todos los vehículos tienen un viaje abierto. Cierra el odómetro o cancela ese viaje para liberar el carro.
@@ -546,22 +533,16 @@ export function ViajesPage() {
             No aparecen las unidades que aún no han cerrado odómetro.
           </p>
         )}
-        <Field label="Conductor responsable">
-          <select className={selectClass} value={form.conductor} onChange={(e) => setForm({ ...form, conductor: e.target.value })}>
-            <option value="">Seleccione</option>
-            {usuarios.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nombre}{u.rol_label ? ` · ${u.rol_label}` : ""}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Fecha">
-          <input type="date" className={inputClass} value={form.fecha_inicio} onChange={(e) => setForm({ ...form, fecha_inicio: e.target.value })} />
-        </Field>
-        <Field label="Hora salida">
-          <input type="time" className={inputClass} value={form.hora_salida} onChange={(e) => setForm({ ...form, hora_salida: e.target.value })} />
-        </Field>
+        <SelectField form={viajeForm} name="conductor" label="Conductor responsable">
+          <option value="">Seleccione</option>
+          {usuarios.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.nombre}{u.rol_label ? ` · ${u.rol_label}` : ""}
+            </option>
+          ))}
+        </SelectField>
+        <TextField form={viajeForm} name="fecha_inicio" label="Fecha" type="date" />
+        <TextField form={viajeForm} name="hora_salida" label="Hora salida" type="time" />
       </Modal>
 
       <Modal
@@ -596,7 +577,6 @@ export function ViajesPage() {
       <NuevaCiudadModal
         open={modalCiudad}
         onClose={() => setModalCiudad(false)}
-        onCreated={(nueva) => setCiudades((prev) => mergeCiudad(prev, nueva))}
       />
       <GuiaRemisionModal
         open={!!guiaViaje}

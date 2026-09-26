@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Scale, Truck, Users, Wallet } from "lucide-react";
 import { DashboardService, CiudadService } from "@/service/api";
@@ -8,29 +9,23 @@ import { KpiCard } from "@/components/KpiCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ESTADO_VIAJE, ESTADO_FLOTA, formatKg, formatMoney, monthISO } from "@/utils/format";
 import { inputClass } from "@/components/Modal";
-import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
+import { CiudadFields, NuevaCiudadModal } from "@/components/CiudadSelect";
 import { useAuth } from "@/context/AuthContext";
+import { useApiList } from "@/hooks/useApiQuery";
+import { qk } from "@/query/keys";
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const [mes, setMes] = useState(monthISO());
   const [ciudad, setCiudad] = useState("");
-  const [ciudades, setCiudades] = useState([]);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [modalCiudad, setModalCiudad] = useState(false);
-
-  useEffect(() => {
-    CiudadService.getAll().then((res) => setCiudades(asCiudades(res.data)));
-  }, []);
-
-  useEffect(() => {
-    setLoading(true);
-    DashboardService.get({ mes, ciudad: ciudad || undefined })
-      .then((res) => setData(res.data))
-      .finally(() => setLoading(false));
-  }, [mes, ciudad]);
+  const { data: ciudades = [] } = useApiList(qk.ciudades, () => CiudadService.getAll());
+  const { data, isLoading: loading } = useQuery({
+    queryKey: qk.dashboard({ mes, ciudad }),
+    queryFn: async () => (await DashboardService.get({ mes, ciudad: ciudad || undefined })).data,
+    placeholderData: keepPreviousData,
+  });
 
   const residueTotal = useMemo(
     () => (data?.residuos || []).reduce((s, r) => s + Number(r.peso || 0), 0),
@@ -237,10 +232,7 @@ export function DashboardPage() {
       <NuevaCiudadModal
         open={modalCiudad}
         onClose={() => setModalCiudad(false)}
-        onCreated={(nueva) => {
-          setCiudades((prev) => mergeCiudad(prev, nueva));
-          setCiudad(String(nueva.id));
-        }}
+        onCreated={(nueva) => setCiudad(String(nueva.id))}
       />
     </>
   );

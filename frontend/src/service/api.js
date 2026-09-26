@@ -85,16 +85,11 @@ export const NotificacionService = {
   leer: (id) => api.post(`/notificaciones/${id}/leer/`),
   leerTodas: () => api.post("/notificaciones/leer-todas/"),
 };
-export const AlertasTallerService = {
-  getAll: () => api.get("/alertas-taller/"),
-};
 export const DocumentoService = crud("/documentos/");
 export const RutaService = crud("/rutas/");
 export const CiudadService = crud("/ciudades/");
 export const RecojoService = crud("/recojos/");
 export const SedeService = crud("/sedes/");
-export const PersonaService = crud("/personas/");
-export const TipoResiduoService = crud("/tipos-residuo/");
 export const CategoriaGastoService = crud("/categorias-gasto/");
 export const CajaService = {
   getAll: (params) => api.get("/cajas/", { params }),

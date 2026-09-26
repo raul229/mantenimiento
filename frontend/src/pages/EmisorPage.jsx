@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import toast from "react-hot-toast";
+import { useQuery } from "@tanstack/react-query";
 import { ConfiguracionEmisorService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
-import { Field, inputClass } from "@/components/Modal";
+import { TextField } from "@/components/AppForm";
+import { useAppForm } from "@/hooks/useAppForm";
+import { emisorSchema } from "@/forms/schemas";
+import { qk } from "@/query/keys";
+import { useInvalidate } from "@/hooks/useApiQuery";
 
 const vacio = {
   ruc: "",
@@ -19,43 +24,30 @@ const vacio = {
 };
 
 export function EmisorPage() {
-  const [form, setForm] = useState(vacio);
-  const [correlativo, setCorrelativo] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const invalidate = useInvalidate();
+  const { data, isLoading: loading } = useQuery({
+    queryKey: qk.emisor,
+    queryFn: async () => (await ConfiguracionEmisorService.get()).data,
+  });
+
+  const form = useAppForm({
+    defaultValues: vacio,
+    schema: emisorSchema,
+    onSubmit: async (value) => {
+      try {
+        const { data: saved } = await ConfiguracionEmisorService.update(value);
+        form.reset({ ...vacio, ...saved });
+        await invalidate(qk.emisor);
+        toast.success("Datos de emisión actualizados");
+      } catch {
+        toast.error("No se pudieron guardar los datos");
+      }
+    },
+  });
 
   useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await ConfiguracionEmisorService.get();
-        setForm({ ...vacio, ...data });
-        setCorrelativo(data.correlativo || 0);
-      } catch {
-        toast.error("No se pudo cargar la configuración");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const set = (campo) => (e) => setForm({ ...form, [campo]: e.target.value });
-
-  const guardar = async () => {
-    if (!form.ruc || !form.razon_social) {
-      toast.error("El RUC y la razón social del emisor son obligatorios");
-      return;
-    }
-    setSaving(true);
-    try {
-      const { data } = await ConfiguracionEmisorService.update(form);
-      setForm({ ...vacio, ...data });
-      toast.success("Datos de emisión actualizados");
-    } catch {
-      toast.error("No se pudieron guardar los datos");
-    } finally {
-      setSaving(false);
-    }
-  };
+    if (data) form.reset({ ...vacio, ...data });
+  }, [data]);
 
   return (
     <>
@@ -71,56 +63,38 @@ export function EmisorPage() {
               titulo="Transportista emisor"
               descripcion="Aparece en la cabecera de cada guía de remisión."
             >
-              <Field label="RUC">
-                <input className={inputClass} maxLength={11} value={form.ruc} onChange={set("ruc")} />
-              </Field>
-              <Field label="Razón social">
-                <input className={inputClass} value={form.razon_social} onChange={set("razon_social")} />
-              </Field>
-              <Field label="Nombre comercial">
-                <input className={inputClass} value={form.nombre_comercial} onChange={set("nombre_comercial")} />
-              </Field>
-              <Field label="Dirección fiscal">
-                <input className={inputClass} value={form.direccion} onChange={set("direccion")} />
-              </Field>
-              <Field label="Registro MTC">
-                <input className={inputClass} value={form.registro_mtc} onChange={set("registro_mtc")} />
-              </Field>
-              <Field label="Teléfono">
-                <input className={inputClass} value={form.telefono} onChange={set("telefono")} />
-              </Field>
+              <TextField form={form} name="ruc" label="RUC" maxLength={11} />
+              <TextField form={form} name="razon_social" label="Razón social" />
+              <TextField form={form} name="nombre_comercial" label="Nombre comercial" />
+              <TextField form={form} name="direccion" label="Dirección fiscal" />
+              <TextField form={form} name="registro_mtc" label="Registro MTC" />
+              <TextField form={form} name="telefono" label="Teléfono" />
             </Bloque>
 
             <Bloque
               titulo="Numeración"
-              descripcion={`Última guía emitida: ${correlativo || "ninguna"}. La serie solo afecta a las guías nuevas.`}
+              descripcion={`Última guía emitida: ${data?.correlativo || "ninguna"}. La serie solo afecta a las guías nuevas.`}
             >
-              <Field label="Serie">
-                <input className={inputClass} maxLength={8} value={form.serie_guia} onChange={set("serie_guia")} />
-              </Field>
+              <TextField form={form} name="serie_guia" label="Serie" maxLength={8} />
             </Bloque>
 
             <Bloque
               titulo="Destino por defecto"
               descripcion="Planta de disposición final a la que se traslada el residuo."
             >
-              <Field label="RUC del destinatario">
-                <input className={inputClass} maxLength={11} value={form.destinatario_documento} onChange={set("destinatario_documento")} />
-              </Field>
-              <Field label="Razón social del destinatario">
-                <input className={inputClass} value={form.destinatario_razon_social} onChange={set("destinatario_razon_social")} />
-              </Field>
-              <Field label="Punto de llegada">
-                <input className={inputClass} value={form.punto_llegada} onChange={set("punto_llegada")} />
-              </Field>
-              <Field label="Motivo del traslado">
-                <input className={inputClass} value={form.motivo_traslado} onChange={set("motivo_traslado")} />
-              </Field>
+              <TextField form={form} name="destinatario_documento" label="RUC del destinatario" maxLength={11} />
+              <TextField form={form} name="destinatario_razon_social" label="Razón social del destinatario" />
+              <TextField form={form} name="punto_llegada" label="Punto de llegada" />
+              <TextField form={form} name="motivo_traslado" label="Motivo del traslado" />
             </Bloque>
 
-            <button type="button" disabled={saving} onClick={guardar} className="btn btn-primary">
-              {saving ? "Guardando…" : "Guardar datos"}
-            </button>
+            <form.Subscribe selector={(s) => s.isSubmitting}>
+              {(saving) => (
+                <button type="button" disabled={saving} onClick={() => form.handleSubmit()} className="btn btn-primary">
+                  {saving ? "Guardando…" : "Guardar datos"}
+                </button>
+              )}
+            </form.Subscribe>
           </div>
         )}
       </div>

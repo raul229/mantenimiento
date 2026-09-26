@@ -6,20 +6,27 @@ import { Topbar } from "@/layout/Topbar";
 import { DataTable } from "@/components/DataTable";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass } from "@/components/Modal";
-import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
+import { Modal, inputClass, filterClass, filterSelectClass } from "@/components/Modal";
+import { CiudadFields, NuevaCiudadModal } from "@/components/CiudadSelect";
 import { GuiaRemisionModal, avisarOmitidos } from "@/components/GuiaRemisionModal";
 import { ESTADO_RECOJO, formatDate, formatTime, formatKg, formatKgPrecise, monthISO } from "@/utils/format";
 import { useAuth } from "@/context/AuthContext";
+import { useApiList, useInvalidate } from "@/hooks/useApiQuery";
+import { qk } from "@/query/keys";
+import { TextField, SelectField } from "@/components/AppForm";
+import { useAppForm } from "@/hooks/useAppForm";
+import { recojoSchema } from "@/forms/schemas";
 
 const VIAJE_EN_PROCESO = new Set(["programado", "en curso"]);
 
+const vacioRecojo = { viaje: "", sede: "", peso_kg: "", observaciones: "" };
+
 export function RecojosPage() {
   const { can } = useAuth();
-  const [recojos, setRecojos] = useState([]);
-  const [viajes, setViajes] = useState([]);
-  const [ciudades, setCiudades] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const invalidate = useInvalidate();
+  const { data: recojos = [], isLoading: loading } = useApiList(qk.recojos, () => RecojoService.getAll());
+  const { data: viajes = [] } = useApiList(qk.viajes, () => ViajeService.getAll());
+  const { data: ciudades = [] } = useApiList(qk.ciudades, () => CiudadService.getAll());
   const [selectedId, setSelectedId] = useState(null);
   const [q, setQ] = useState("");
   const [estado, setEstado] = useState("");
@@ -32,30 +39,31 @@ export function RecojosPage() {
   const [seleccion, setSeleccion] = useState([]);
   const [guiaIds, setGuiaIds] = useState(null);
   const [emitiendo, setEmitiendo] = useState(false);
-  const [form, setForm] = useState({
-    viaje: "",
-    sede: "",
-    peso_kg: "",
-    observaciones: "",
+
+  const recargar = () => invalidate(qk.recojos, qk.viajes);
+
+  const form = useAppForm({
+    defaultValues: vacioRecojo,
+    schema: recojoSchema,
+    onSubmit: async (value) => {
+      try {
+        await RecojoService.create({
+          viaje: value.viaje,
+          sede: value.sede,
+          peso_kg: Number(value.peso_kg),
+          observaciones: value.observaciones,
+        });
+        toast.success("Recojo registrado");
+        setModal(false);
+        form.reset(vacioRecojo);
+        recargar();
+      } catch (err) {
+        const data = err?.response?.data;
+        const msg = data?.sede?.[0] || data?.viaje?.[0] || data?.peso_kg?.[0] || "No se pudo guardar el recojo";
+        toast.error(msg);
+      }
+    },
   });
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [r, v, c] = await Promise.all([
-        RecojoService.getAll(),
-        ViajeService.getAll(),
-        CiudadService.getAll(),
-      ]);
-      setRecojos(r.data);
-      setViajes(v.data);
-      setCiudades(asCiudades(c.data));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, []);
 
   const selected = recojos.find((r) => r.id === selectedId) || null;
 
@@ -72,12 +80,12 @@ export function RecojosPage() {
     [viajes],
   );
 
-  const viajeForm = viajes.find((v) => String(v.id) === String(form.viaje));
-  const sedesPendientes = useMemo(() => {
-    if (!viajeForm) return [];
-    const ya = new Set((viajeForm.recojos || []).map((r) => String(r.sede)));
-    return (viajeForm.sedes_data || []).filter((s) => !ya.has(String(s.id)));
-  }, [viajeForm]);
+  const sedesDeViaje = (viajeId) => {
+    const viaje = viajes.find((v) => String(v.id) === String(viajeId));
+    if (!viaje) return [];
+    const ya = new Set((viaje.recojos || []).map((r) => String(r.sede)));
+    return (viaje.sedes_data || []).filter((s) => !ya.has(String(s.id)));
+  };
 
   const filtered = useMemo(() => {
     return recojos.filter((r) => {
@@ -103,38 +111,8 @@ export function RecojosPage() {
   }, [recojos, mes]);
 
   const openNew = () => {
-    setForm({ viaje: "", sede: "", peso_kg: "", observaciones: "" });
+    form.reset(vacioRecojo);
     setModal(true);
-  };
-
-  const saveNew = async () => {
-    if (!form.viaje) {
-      toast.error("Selecciona un viaje en proceso");
-      return;
-    }
-    if (!form.sede) {
-      toast.error("Selecciona una sede");
-      return;
-    }
-    if (!form.peso_kg || Number(form.peso_kg) <= 0) {
-      toast.error("Indica los kilogramos");
-      return;
-    }
-    try {
-      await RecojoService.create({
-        viaje: form.viaje,
-        sede: form.sede,
-        peso_kg: Number(form.peso_kg),
-        observaciones: form.observaciones,
-      });
-      toast.success("Recojo registrado");
-      setModal(false);
-      load();
-    } catch (err) {
-      const data = err?.response?.data;
-      const msg = data?.sede?.[0] || data?.viaje?.[0] || data?.peso_kg?.[0] || "No se pudo guardar el recojo";
-      toast.error(msg);
-    }
   };
 
   const savePeso = async () => {
@@ -143,7 +121,7 @@ export function RecojosPage() {
     try {
       await RecojoService.patch(selected.id, { peso_kg: Number(pesoEdit) || 0 });
       toast.success("Kilogramos actualizados");
-      load();
+      recargar();
     } catch {
       toast.error("No se pudo actualizar el recojo");
     } finally {
@@ -169,7 +147,7 @@ export function RecojosPage() {
       avisarOmitidos(data.omitidos);
       setGuiaIds(data.guias.map((g) => g.id));
       setSeleccion([]);
-      load();
+      recargar();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "No se pudieron emitir las guías", {
         duration: 7000,
@@ -324,49 +302,42 @@ export function RecojosPage() {
         )}
       </div>
 
-      <Modal open={modal} title="Nuevo recojo" onClose={() => setModal(false)} onSubmit={saveNew}>
-        <Field label="Viaje en proceso">
-          <select className={selectClass} value={form.viaje} onChange={(e) => setForm({ ...form, viaje: e.target.value, sede: "" })}>
-            <option value="">Seleccione</option>
-            {viajesEnProceso.map((v) => (
-              <option key={v.id} value={v.id}>
-                #{v.id} {v.ruta_data?.nombre || ""} · {v.vehiculo_data?.placa || ""} · {v.paradas_hechas}/{v.paradas_total} sedes
-              </option>
-            ))}
-          </select>
-        </Field>
+      <Modal open={modal} title="Nuevo recojo" onClose={() => setModal(false)} onSubmit={() => form.handleSubmit()}>
+        <SelectField form={form} name="viaje" label="Viaje en proceso" onValueChange={() => form.setFieldValue("sede", "")}>
+          <option value="">Seleccione</option>
+          {viajesEnProceso.map((v) => (
+            <option key={v.id} value={v.id}>
+              #{v.id} {v.ruta_data?.nombre || ""} · {v.vehiculo_data?.placa || ""} · {v.paradas_hechas}/{v.paradas_total} sedes
+            </option>
+          ))}
+        </SelectField>
         {!viajesEnProceso.length && (
           <p className="text-sm text-muted">No hay viajes con sedes pendientes de recojo.</p>
         )}
-        <Field label="Sede">
-          <select className={selectClass} value={form.sede} onChange={(e) => setForm({ ...form, sede: e.target.value })} disabled={!form.viaje}>
-            <option value="">{form.viaje ? "Seleccione una sede pendiente" : "Primero elige un viaje"}</option>
-            {sedesPendientes.map((s) => (
-              <option key={s.id} value={s.id}>{s.nombre} {s.cliente_nombre ? `· ${s.cliente_nombre}` : ""}</option>
-            ))}
-          </select>
-        </Field>
-        {form.viaje && !sedesPendientes.length && (
-          <p className="text-sm text-warning">Todas las sedes de este viaje ya tienen recojo.</p>
-        )}
-        <Field label="Kilogramos">
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            className={inputClass}
-            value={form.peso_kg}
-            onChange={(e) => setForm({ ...form, peso_kg: e.target.value })}
-          />
-        </Field>
-        <Field label="Observaciones">
-          <input className={inputClass} value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} />
-        </Field>
+        <form.Subscribe selector={(s) => s.values.viaje}>
+          {(viajeId) => {
+            const pendientes = sedesDeViaje(viajeId);
+            return (
+              <>
+                <SelectField form={form} name="sede" label="Sede" disabled={!viajeId}>
+                  <option value="">{viajeId ? "Seleccione una sede pendiente" : "Primero elige un viaje"}</option>
+                  {pendientes.map((s) => (
+                    <option key={s.id} value={s.id}>{s.nombre} {s.cliente_nombre ? `· ${s.cliente_nombre}` : ""}</option>
+                  ))}
+                </SelectField>
+                {viajeId && !pendientes.length && (
+                  <p className="text-sm text-warning">Todas las sedes de este viaje ya tienen recojo.</p>
+                )}
+              </>
+            );
+          }}
+        </form.Subscribe>
+        <TextField form={form} name="peso_kg" label="Kilogramos" type="number" min="0" step="0.01" />
+        <TextField form={form} name="observaciones" label="Observaciones" />
       </Modal>
       <NuevaCiudadModal
         open={modalCiudad}
         onClose={() => setModalCiudad(false)}
-        onCreated={(nueva) => setCiudades((prev) => mergeCiudad(prev, nueva))}
       />
       <GuiaRemisionModal
         open={!!guiaIds}

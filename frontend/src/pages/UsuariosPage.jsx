@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Plus, Search } from "lucide-react";
 import { PersonalService, RolService } from "@/service/api";
@@ -6,11 +6,17 @@ import { Topbar } from "@/layout/Topbar";
 import { DataTable } from "@/components/DataTable";
 import { DetailPanel } from "@/components/DetailPanel";
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { Modal, Field, inputClass, selectClass, filterClass } from "@/components/Modal";
+import { Modal, Field, inputClass, filterClass } from "@/components/Modal";
 import { useAuth } from "@/context/AuthContext";
 import { etiquetaPermiso } from "@/utils/roles";
+import { useApiList, useInvalidate } from "@/hooks/useApiQuery";
+import { qk } from "@/query/keys";
+import { TextField, SelectField, CheckField } from "@/components/AppForm";
+import { useAppForm } from "@/hooks/useAppForm";
+import { usuarioSchema, rolSchema } from "@/forms/schemas";
 
 const vacioUsuario = {
+  id: undefined,
   username: "",
   first_name: "",
   last_name: "",
@@ -33,38 +39,56 @@ function etiqueta(roles, codigo) {
 
 export function UsuariosPage() {
   const { user: yo, reload, canDelete } = useAuth();
+  const invalidate = useInvalidate();
   const [tab, setTab] = useState("usuarios");
-  const [usuarios, setUsuarios] = useState([]);
-  const [roles, setRoles] = useState([]);
-  const [catalogo, setCatalogo] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: usuarios = [], isLoading: loading } = useApiList(qk.personal, () => PersonalService.getAll());
+  const { data: roles = [] } = useApiList(qk.roles, () => RolService.getAll());
+  const { data: catalogo = [] } = useApiList(qk.rolesCatalogo, () => RolService.catalogo());
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [rolId, setRolId] = useState(null);
   const [modalUser, setModalUser] = useState(false);
   const [modalRol, setModalRol] = useState(false);
-  const [form, setForm] = useState(vacioUsuario);
   const [rolForm, setRolForm] = useState(vacioRol);
   const [saving, setSaving] = useState(false);
   const [borrarRol, setBorrarRol] = useState(null);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [u, r, c] = await Promise.all([
-        PersonalService.getAll(),
-        RolService.getAll(),
-        RolService.catalogo(),
-      ]);
-      setUsuarios(u.data);
-      setRoles(r.data);
-      setCatalogo(c.data);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const recargar = () => invalidate(qk.personal, qk.roles, qk.usuarios);
 
-  useEffect(() => { load(); }, []);
+  const form = useAppForm({
+    defaultValues: vacioUsuario,
+    schema: usuarioSchema,
+    onSubmit: async (value) => {
+      setSaving(true);
+      try {
+        const payload = {
+          username: value.username.trim(),
+          first_name: value.first_name,
+          last_name: value.last_name,
+          email: value.email,
+          rol: value.rol,
+          is_active: value.is_active,
+        };
+        if (value.password) payload.password = value.password;
+        if (value.id) {
+          await PersonalService.patch(value.id, payload);
+          toast.success("Usuario actualizado");
+        } else {
+          await PersonalService.create(payload);
+          toast.success("Usuario creado");
+        }
+        setModalUser(false);
+        form.reset(vacioUsuario);
+        recargar();
+      } catch (err) {
+        const data = err?.response?.data;
+        const msg = data?.username?.[0] || data?.password?.[0] || data?.rol?.[0] || data?.detail || "No se pudo guardar";
+        toast.error(msg);
+      } finally {
+        setSaving(false);
+      }
+    },
+  });
 
   const selected = usuarios.find((u) => u.id === selectedId) || null;
   const selectedRol = roles.find((r) => r.id === rolId) || null;
@@ -85,51 +109,8 @@ export function UsuariosPage() {
 
   const abrirNuevoUsuario = () => {
     const preferido = roles.find((r) => r.codigo === "conductor") || roles[0];
-    setForm({ ...vacioUsuario, rol: preferido?.codigo || "" });
+    form.reset({ ...vacioUsuario, rol: preferido?.codigo || "" });
     setModalUser(true);
-  };
-
-  const guardarUsuario = async () => {
-    if (!form.username.trim()) {
-      toast.error("Indica el usuario");
-      return;
-    }
-    if (!form.rol) {
-      toast.error("Elige un rol");
-      return;
-    }
-    if (!form.id && !form.password) {
-      toast.error("Indica una contraseña");
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {
-        username: form.username.trim(),
-        first_name: form.first_name,
-        last_name: form.last_name,
-        email: form.email,
-        rol: form.rol,
-        is_active: form.is_active,
-      };
-      if (form.password) payload.password = form.password;
-      if (form.id) {
-        await PersonalService.patch(form.id, payload);
-        toast.success("Usuario actualizado");
-      } else {
-        await PersonalService.create(payload);
-        toast.success("Usuario creado");
-      }
-      setModalUser(false);
-      setForm(vacioUsuario);
-      load();
-    } catch (err) {
-      const data = err?.response?.data;
-      const msg = data?.username?.[0] || data?.password?.[0] || data?.rol?.[0] || data?.detail || "No se pudo guardar";
-      toast.error(msg);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const setPermiso = (modulo, nivel) => {
@@ -142,8 +123,14 @@ export function UsuariosPage() {
   };
 
   const guardarRol = async () => {
-    if (!rolForm.nombre.trim()) {
-      toast.error("Indica el nombre del rol");
+    const parsed = rolSchema.safeParse({
+      nombre: rolForm.nombre,
+      descripcion: rolForm.descripcion,
+      solo_asignados: rolForm.solo_asignados,
+      permisos: rolForm.permisos,
+    });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message || "Revisa el rol");
       return;
     }
     setSaving(true);
@@ -164,7 +151,7 @@ export function UsuariosPage() {
       }
       setModalRol(false);
       setRolForm(vacioRol);
-      load();
+      recargar();
     } catch (err) {
       const data = err?.response?.data;
       const msg = data?.nombre?.[0] || data?.permisos?.[0] || data?.detail || "No se pudo guardar";
@@ -181,7 +168,7 @@ export function UsuariosPage() {
       toast.success("Rol eliminado");
       if (rolId === borrarRol.id) setRolId(null);
       setBorrarRol(null);
-      load();
+      recargar();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "No se pudo eliminar");
       setBorrarRol(null);
@@ -299,7 +286,7 @@ export function UsuariosPage() {
               type="button"
               className="btn btn-outline mt-4 w-full"
               onClick={() => {
-                setForm({
+                form.reset({
                   id: selected.id,
                   username: selected.username,
                   first_name: selected.first_name || "",
@@ -373,51 +360,33 @@ export function UsuariosPage() {
 
       <Modal
         open={modalUser}
-        title={form.id ? "Editar usuario" : "Nuevo usuario"}
+        title={form.state.values.id ? "Editar usuario" : "Nuevo usuario"}
         onClose={() => setModalUser(false)}
-        onSubmit={guardarUsuario}
+        onSubmit={() => form.handleSubmit()}
         submitLabel={saving ? "Guardando…" : "Guardar"}
       >
-        <Field label="Usuario">
-          <input className={inputClass} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-        </Field>
-        <Field label="Nombre">
-          <input className={inputClass} value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} />
-        </Field>
-        <Field label="Apellido">
-          <input className={inputClass} value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
-        </Field>
-        <Field label="Correo">
-          <input className={inputClass} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        </Field>
-        <Field label="Rol">
-          <select
-            className={selectClass}
-            value={form.rol}
-            disabled={yo?.id === form.id}
-            onChange={(e) => setForm({ ...form, rol: e.target.value })}
-          >
-            <option value="">Seleccione</option>
-            {roles.map((r) => (
-              <option key={r.codigo} value={r.codigo}>{r.nombre}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label={form.id ? "Nueva contraseña (opcional)" : "Contraseña"}>
-          <input className={inputClass} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-        </Field>
-        {form.id && (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm"
-              checked={form.is_active}
-              disabled={yo?.id === form.id}
-              onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-            />
-            Activo
-          </label>
-        )}
+        <TextField form={form} name="username" label="Usuario" />
+        <TextField form={form} name="first_name" label="Nombre" />
+        <TextField form={form} name="last_name" label="Apellido" />
+        <TextField form={form} name="email" label="Correo" type="email" />
+        <form.Subscribe selector={(s) => s.values.id}>
+          {(id) => (
+            <SelectField form={form} name="rol" label="Rol" disabled={yo?.id === id}>
+              <option value="">Seleccione</option>
+              {roles.map((r) => (
+                <option key={r.codigo} value={r.codigo}>{r.nombre}</option>
+              ))}
+            </SelectField>
+          )}
+        </form.Subscribe>
+        <form.Subscribe selector={(s) => s.values.id}>
+          {(id) => (
+            <>
+              <TextField form={form} name="password" label={id ? "Nueva contraseña (opcional)" : "Contraseña"} type="password" />
+              {id && <CheckField form={form} name="is_active" label="Activo" disabled={yo?.id === id} />}
+            </>
+          )}
+        </form.Subscribe>
       </Modal>
 
       <Modal

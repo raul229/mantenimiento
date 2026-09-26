@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Plus, Search, Trash2 } from "lucide-react";
 import { ClienteService, CiudadService, SedeService } from "@/service/api";
@@ -7,9 +7,12 @@ import { DataTable } from "@/components/DataTable";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Modal, Field, inputClass, selectClass } from "@/components/Modal";
-import { CiudadFields, NuevaCiudadModal, asCiudades, mergeCiudad } from "@/components/CiudadSelect";
+import { CiudadFields, NuevaCiudadModal } from "@/components/CiudadSelect";
 import { formatDate, formatKg, clasificarDocumento, NATURALEZA_CLIENTE } from "@/utils/format";
 import { formatApiError } from "@/utils/formatApiError";
+import { useApiList, useInvalidate } from "@/hooks/useApiQuery";
+import { qk } from "@/query/keys";
+import { clienteSchema, sedeSchema } from "@/forms/schemas";
 
 const TIPO = {
   publico: { label: "Público", className: "badge-info" },
@@ -68,34 +71,21 @@ function personaLabel(p) {
 }
 
 export function ClientesPage() {
-  const [clientes, setClientes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const invalidate = useInvalidate();
+  const { data: clientes = [], isLoading: loading } = useApiList(qk.clientes, () => ClienteService.getAll());
+  const { data: ciudades = [] } = useApiList(qk.ciudades, () => CiudadService.getAll());
   const [tab, setTab] = useState("todos");
   const [seccion, setSeccion] = useState("clientes");
   const [q, setQ] = useState("");
   const [ciudad, setCiudad] = useState("");
-  const [ciudades, setCiudades] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [modalCliente, setModalCliente] = useState(false);
   const [modalSede, setModalSede] = useState(false);
   const [modalCiudad, setModalCiudad] = useState(false);
   const [form, setForm] = useState(emptyClienteForm);
   const [sedeForm, setSedeForm] = useState(emptySedeForm);
   const ciudadAssignRef = useRef(null);
-
-  const load = () => {
-    setLoading(true);
-    Promise.all([ClienteService.getAll(), CiudadService.getAll()])
-      .then(([c, ci]) => {
-        setClientes(c.data);
-        setCiudades(asCiudades(ci.data));
-        setSelected((prev) => (prev ? c.data.find((x) => x.id === prev.id) || null : null));
-      })
-      .catch(() => toast.error("No se pudieron cargar clientes o ciudades"))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => { load(); }, []);
+  const selected = clientes.find((c) => c.id === selectedId) || null;
 
   const filtered = useMemo(() => {
     return clientes.filter((c) => {
@@ -123,7 +113,6 @@ export function ClientesPage() {
   };
 
   const onCiudadCreada = (nueva) => {
-    setCiudades((prev) => mergeCiudad(prev, nueva));
     ciudadAssignRef.current?.(String(nueva.id));
     ciudadAssignRef.current = null;
   };
@@ -209,34 +198,13 @@ export function ClientesPage() {
   };
 
   const saveCliente = async () => {
+    const parsed = clienteSchema.safeParse(form);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message || "Revisa el formulario");
+      return;
+    }
     const tipoCliente = clasificarDocumento(form.numero_documento);
-    if (!tipoCliente) {
-      toast.error("Ingresa un RUC (11 dígitos) o DNI (8 dígitos) válido");
-      return;
-    }
-    if (tipoCliente === "empresa" && !form.razon_social.trim()) {
-      toast.error("La razón social es obligatoria");
-      return;
-    }
-    if (tipoCliente === "persona" && (!form.titular.nombre.trim() || !form.titular.apellido_paterno.trim())) {
-      toast.error("La persona necesita nombre y apellido");
-      return;
-    }
     const contactos = tipoCliente === "empresa" ? form.contactos : form.contactos.filter((c) => c.nombre.trim() || c.apellido_paterno.trim());
-    if (tipoCliente === "empresa") {
-      for (const [i, c] of contactos.entries()) {
-        if (!c.nombre.trim() || !c.apellido_paterno.trim()) {
-          toast.error(`El contacto ${i + 1} necesita nombre y apellido`);
-          return;
-        }
-      }
-    }
-    for (const [i, s] of form.sedes.entries()) {
-      if (!s.direccion.trim() || !s.ciudad) {
-        toast.error(`La sede ${i + 1} necesita ciudad y dirección`);
-        return;
-      }
-    }
     try {
       await ClienteService.create({
         numero_documento: form.numero_documento.replace(/\D/g, ""),
@@ -255,15 +223,16 @@ export function ClientesPage() {
       toast.success("Cliente y sedes creados");
       setModalCliente(false);
       setForm(emptyClienteForm());
-      load();
+      await invalidate(qk.clientes);
     } catch (err) {
       toast.error(formatApiError(err).join(" · "));
     }
   };
 
   const saveSede = async () => {
-    if (!sedeForm.cliente || !sedeForm.ciudad || !sedeForm.direccion.trim()) {
-      toast.error("Cliente, ciudad y dirección son obligatorios");
+    const parsed = sedeSchema.safeParse(sedeForm);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message || "Revisa el formulario");
       return;
     }
     const payload = {
@@ -273,24 +242,15 @@ export function ClientesPage() {
       nombre: sedeForm.nombre.trim(),
     };
     if (sedeForm.modoPersona === "nueva") {
-      const p = sedeForm.persona_nueva;
-      if (!p.nombre.trim() || !p.apellido_paterno.trim()) {
-        toast.error("El encargado necesita nombre y apellido");
-        return;
-      }
-      payload.persona_input = { ...p };
+      payload.persona_input = { ...sedeForm.persona_nueva };
     } else {
-      if (!sedeForm.persona) {
-        toast.error("Selecciona un encargado o registra uno nuevo");
-        return;
-      }
       payload.persona = Number(sedeForm.persona);
     }
     try {
       await SedeService.create(payload);
       toast.success("Sede creada");
       setModalSede(false);
-      load();
+      await invalidate(qk.clientes, qk.sedes);
     } catch (err) {
       toast.error(formatApiError(err).join(" · "));
     }
@@ -378,7 +338,7 @@ export function ClientesPage() {
               <div className="stat-desc">privados</div>
             </div>
           </div>
-          <DataTable columns={columns} data={filtered} loading={loading} onRowClick={setSelected} selectedId={selected?.id} />
+          <DataTable columns={columns} data={filtered} loading={loading} onRowClick={(row) => setSelectedId(row.id)} selectedId={selected?.id} />
             </>
           )}
           {seccion === "ciudades" && (
@@ -395,7 +355,7 @@ export function ClientesPage() {
             title={selected.razon_social}
             subtitle={selected.naturaleza === "persona" ? "Persona natural" : "Empresa"}
             badge={<StatusBadge map={ESTADO} value={selected.estado} />}
-            onClose={() => setSelected(null)}
+            onClose={() => setSelectedId(null)}
           >
             <Section title="Identificación">
               <Row label="Documento" value={selected.numero_documento} />

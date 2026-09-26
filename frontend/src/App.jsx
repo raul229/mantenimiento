@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { queryClient } from "@/query/client";
 import { AppLayout } from "@/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -62,8 +64,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

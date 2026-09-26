@@ -1,24 +1,16 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import toast from "react-hot-toast";
 import { Plus } from "lucide-react";
 import { CiudadService } from "@/service/api";
-import { Modal, Field, inputClass, selectClass, filterSelectClass } from "@/components/Modal";
+import { Modal, selectClass, filterSelectClass } from "@/components/Modal";
 import { formatApiError } from "@/utils/formatApiError";
+import { TextField } from "@/components/AppForm";
+import { useAppForm } from "@/hooks/useAppForm";
+import { ciudadSchema } from "@/forms/schemas";
+import { useInvalidate } from "@/hooks/useApiQuery";
+import { qk } from "@/query/keys";
 
 const emptyCiudad = () => ({ nombre: "", distrito: "", departamento: "" });
-
-export function asCiudades(data) {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.results)) return data.results;
-  return [];
-}
-
-export function mergeCiudad(list, ciudad) {
-  const next = list.some((c) => c.id === ciudad.id)
-    ? list.map((c) => (c.id === ciudad.id ? ciudad : c))
-    : [...list, ciudad];
-  return next.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-}
 
 export function CiudadFields({
   value,
@@ -55,39 +47,37 @@ export function CiudadFields({
 }
 
 export function NuevaCiudadModal({ open, onClose, onCreated }) {
-  const [form, setForm] = useState(emptyCiudad);
+  const invalidate = useInvalidate();
+  const form = useAppForm({
+    defaultValues: emptyCiudad(),
+    schema: ciudadSchema,
+    onSubmit: async (value) => {
+      try {
+        const { data } = await CiudadService.create({
+          nombre: value.nombre.trim(),
+          distrito: value.distrito.trim(),
+          departamento: value.departamento.trim(),
+        });
+        toast.success("Ciudad creada");
+        await invalidate(qk.ciudades);
+        onCreated?.(data);
+        form.reset(emptyCiudad());
+        onClose();
+      } catch (err) {
+        toast.error(formatApiError(err).join(" · "));
+      }
+    },
+  });
 
-  const save = async () => {
-    if (!form.nombre.trim()) {
-      toast.error("El nombre de la ciudad es obligatorio");
-      return;
-    }
-    try {
-      const { data } = await CiudadService.create({
-        nombre: form.nombre.trim(),
-        distrito: form.distrito.trim(),
-        departamento: form.departamento.trim(),
-      });
-      toast.success("Ciudad creada");
-      onCreated?.(data);
-      setForm(emptyCiudad());
-      onClose();
-    } catch (err) {
-      toast.error(formatApiError(err).join(" · "));
-    }
-  };
+  useEffect(() => {
+    if (open) form.reset(emptyCiudad());
+  }, [open]);
 
   return (
-    <Modal open={open} title="Nueva ciudad" submitLabel="Crear ciudad" onClose={onClose} onSubmit={save}>
-      <Field label="Nombre">
-        <input className={inputClass} value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-      </Field>
-      <Field label="Distrito">
-        <input className={inputClass} value={form.distrito} onChange={(e) => setForm({ ...form, distrito: e.target.value })} />
-      </Field>
-      <Field label="Departamento">
-        <input className={inputClass} value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} />
-      </Field>
+    <Modal open={open} title="Nueva ciudad" submitLabel="Crear ciudad" onClose={onClose} onSubmit={() => form.handleSubmit()}>
+      <TextField form={form} name="nombre" label="Nombre" />
+      <TextField form={form} name="distrito" label="Distrito" />
+      <TextField form={form} name="departamento" label="Departamento" />
     </Modal>
   );
 }

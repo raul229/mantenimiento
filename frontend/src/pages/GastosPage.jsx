@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Plus, Search } from "lucide-react";
@@ -8,9 +8,14 @@ import { DataTable } from "@/components/DataTable";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { Modal, Field, inputClass, selectClass, filterClass, filterSelectClass } from "@/components/Modal";
+import { Modal, Field, inputClass, filterClass, filterSelectClass } from "@/components/Modal";
 import { ESTADO_CAJA, ESTADO_VIAJE, formatMoney, formatDate } from "@/utils/format";
 import { useAuth } from "@/context/AuthContext";
+import { useApiList, useInvalidate } from "@/hooks/useApiQuery";
+import { qk } from "@/query/keys";
+import { TextField, SelectField } from "@/components/AppForm";
+import { useAppForm } from "@/hooks/useAppForm";
+import { montoSchema, gastoSchema, categoriaGastoSchema } from "@/forms/schemas";
 
 const vacioMonto = { monto: "", descripcion: "", categoria: "" };
 
@@ -25,10 +30,10 @@ export function GastosPage() {
   const puedeAsignar = canWrite("gastos") && !user?.solo_asignados;
   const puedeRendir = canWrite("gastos");
 
+  const invalidate = useInvalidate();
   const [tab, setTab] = useState("viajes");
-  const [viajes, setViajes] = useState([]);
-  const [categorias, setCategorias] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: viajes = [], isLoading: loading } = useApiList(qk.viajes, () => ViajeService.getAll());
+  const { data: categorias = [] } = useApiList(qk.categoriasGasto, () => CategoriaGastoService.getAll());
   const [q, setQ] = useState("");
   const [estado, setEstado] = useState("");
   const [selectedId, setSelectedId] = useState(params.get("viaje") ? Number(params.get("viaje")) : null);
@@ -39,26 +44,91 @@ export function GastosPage() {
   const [modalCerrar, setModalCerrar] = useState(false);
   const [modalCategoria, setModalCategoria] = useState(false);
   const [form, setForm] = useState(vacioMonto);
-  const [nombreCategoria, setNombreCategoria] = useState("");
   const [saving, setSaving] = useState(false);
   const [borrarMov, setBorrarMov] = useState(null);
   const [borrarCat, setBorrarCat] = useState(null);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [viajesRes, catsRes] = await Promise.all([
-        ViajeService.getAll(),
-        CategoriaGastoService.getAll(),
-      ]);
-      setViajes(viajesRes.data);
-      setCategorias(catsRes.data);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const recargar = () => invalidate(qk.viajes, qk.categoriasGasto);
 
-  useEffect(() => { load(); }, []);
+  const formAsignar = useAppForm({
+    defaultValues: vacioMonto,
+    schema: montoSchema,
+    onSubmit: async (value) => {
+      setSaving(true);
+      try {
+        await CajaService.asignar({ viaje: selected.id, monto: value.monto, descripcion: value.descripcion });
+        toast.success("Fondo asignado");
+        setModalAsignar(false);
+        formAsignar.reset(vacioMonto);
+        recargar();
+      } catch (err) {
+        errorApi(err, "No se pudo guardar");
+      } finally {
+        setSaving(false);
+      }
+    },
+  });
+
+  const formAumento = useAppForm({
+    defaultValues: vacioMonto,
+    schema: montoSchema,
+    onSubmit: async (value) => {
+      setSaving(true);
+      try {
+        await CajaService.aumentar(caja.id, { monto: value.monto, descripcion: value.descripcion });
+        toast.success("Caja aumentada");
+        setModalAumento(false);
+        formAumento.reset(vacioMonto);
+        recargar();
+      } catch (err) {
+        errorApi(err, "No se pudo guardar");
+      } finally {
+        setSaving(false);
+      }
+    },
+  });
+
+  const formGasto = useAppForm({
+    defaultValues: vacioMonto,
+    schema: gastoSchema,
+    onSubmit: async (value) => {
+      setSaving(true);
+      try {
+        await CajaService.gastar(caja.id, {
+          monto: value.monto,
+          categoria: value.categoria,
+          descripcion: value.descripcion,
+        });
+        toast.success("Gasto registrado");
+        setModalGasto(false);
+        formGasto.reset(vacioMonto);
+        recargar();
+      } catch (err) {
+        errorApi(err, "No se pudo guardar");
+      } finally {
+        setSaving(false);
+      }
+    },
+  });
+
+  const formCategoria = useAppForm({
+    defaultValues: { nombre: "" },
+    schema: categoriaGastoSchema,
+    onSubmit: async (value) => {
+      setSaving(true);
+      try {
+        await CategoriaGastoService.create({ nombre: value.nombre.trim(), orden: categorias.length + 1 });
+        toast.success("Categoría creada");
+        setModalCategoria(false);
+        formCategoria.reset({ nombre: "" });
+        recargar();
+      } catch (err) {
+        errorApi(err, "No se pudo crear");
+      } finally {
+        setSaving(false);
+      }
+    },
+  });
 
   const selected = viajes.find((v) => v.id === selectedId) || null;
   const selectedCat = categorias.find((c) => c.id === catId) || null;
@@ -95,48 +165,6 @@ export function GastosPage() {
     toast.error(typeof msg === "string" ? msg : fallback);
   };
 
-  const enviar = async (accion) => {
-    const monto = form.monto;
-    if (!monto || Number(monto) <= 0) {
-      toast.error("Indica un monto");
-      return;
-    }
-    if (accion === "gasto" && !form.categoria) {
-      toast.error("Elige una categoría");
-      return;
-    }
-    setSaving(true);
-    try {
-      if (accion === "asignar") {
-        await CajaService.asignar({
-          viaje: selected.id,
-          monto,
-          descripcion: form.descripcion,
-        });
-        toast.success("Fondo asignado");
-        setModalAsignar(false);
-      } else if (accion === "aumento") {
-        await CajaService.aumentar(caja.id, { monto, descripcion: form.descripcion });
-        toast.success("Caja aumentada");
-        setModalAumento(false);
-      } else {
-        await CajaService.gastar(caja.id, {
-          monto,
-          categoria: form.categoria,
-          descripcion: form.descripcion,
-        });
-        toast.success("Gasto registrado");
-        setModalGasto(false);
-      }
-      setForm(vacioMonto);
-      load();
-    } catch (err) {
-      errorApi(err, "No se pudo guardar");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const cerrarCaja = async () => {
     setSaving(true);
     try {
@@ -147,7 +175,7 @@ export function GastosPage() {
       toast.success("Caja cerrada");
       setModalCerrar(false);
       setForm(vacioMonto);
-      load();
+      recargar();
     } catch (err) {
       errorApi(err, "No se pudo cerrar la caja");
     } finally {
@@ -159,7 +187,7 @@ export function GastosPage() {
     try {
       await CajaService.reabrir(caja.id);
       toast.success("Caja reabierta");
-      load();
+      recargar();
     } catch (err) {
       errorApi(err, "No se pudo reabrir");
     }
@@ -171,32 +199,10 @@ export function GastosPage() {
       await CajaService.borrarMovimiento(caja.id, borrarMov.id);
       toast.success("Movimiento eliminado");
       setBorrarMov(null);
-      load();
+      recargar();
     } catch (err) {
       errorApi(err, "No se pudo eliminar");
       setBorrarMov(null);
-    }
-  };
-
-  const crearCategoria = async () => {
-    if (!nombreCategoria.trim()) {
-      toast.error("Indica el nombre");
-      return;
-    }
-    setSaving(true);
-    try {
-      await CategoriaGastoService.create({
-        nombre: nombreCategoria.trim(),
-        orden: categorias.length + 1,
-      });
-      toast.success("Categoría creada");
-      setModalCategoria(false);
-      setNombreCategoria("");
-      load();
-    } catch (err) {
-      errorApi(err, "No se pudo crear");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -207,7 +213,7 @@ export function GastosPage() {
       toast.success("Categoría eliminada");
       if (catId === borrarCat.id) setCatId(null);
       setBorrarCat(null);
-      load();
+      recargar();
     } catch (err) {
       errorApi(err, "No se pudo eliminar");
       setBorrarCat(null);
@@ -215,7 +221,7 @@ export function GastosPage() {
   };
 
   const abrirGasto = () => {
-    setForm({ ...vacioMonto, categoria: categorias[0]?.id || "" });
+    formGasto.reset({ ...vacioMonto, categoria: categorias[0]?.id || "" });
     setModalGasto(true);
   };
 
@@ -265,7 +271,7 @@ export function GastosPage() {
               <button
                 type="button"
                 className="btn btn-primary ml-auto"
-                onClick={() => { setNombreCategoria(""); setModalCategoria(true); }}
+                onClick={() => { formCategoria.reset({ nombre: "" }); setModalCategoria(true); }}
               >
                 <Plus size={16} /> Nueva categoría
               </button>
@@ -365,12 +371,12 @@ export function GastosPage() {
 
             <div className="mt-4 space-y-2">
               {puedeAsignar && sinFondo && selected.estado !== "cancelado" && (
-                <button type="button" className="btn btn-primary w-full" onClick={() => { setForm(vacioMonto); setModalAsignar(true); }}>
+                <button type="button" className="btn btn-primary w-full" onClick={() => { formAsignar.reset(vacioMonto); setModalAsignar(true); }}>
                   <Plus size={16} /> Asignar fondo
                 </button>
               )}
               {puedeAsignar && caja && abierta && !sinFondo && (
-                <button type="button" className="btn btn-outline w-full" onClick={() => { setForm(vacioMonto); setModalAumento(true); }}>
+                <button type="button" className="btn btn-outline w-full" onClick={() => { formAumento.reset(vacioMonto); setModalAumento(true); }}>
                   Aumentar caja
                 </button>
               )}
@@ -418,39 +424,25 @@ export function GastosPage() {
         )}
       </div>
 
-      <Modal open={modalAsignar} title="Asignar fondo" onClose={() => setModalAsignar(false)} onSubmit={() => enviar("asignar")} submitLabel={saving ? "Guardando…" : "Asignar"}>
-        <Field label="Monto">
-          <input className={inputClass} type="number" min="0.01" step="0.01" value={form.monto} onChange={(e) => setForm({ ...form, monto: e.target.value })} />
-        </Field>
-        <Field label="Nota">
-          <input className={inputClass} value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Fondo inicial" />
-        </Field>
+      <Modal open={modalAsignar} title="Asignar fondo" onClose={() => setModalAsignar(false)} onSubmit={() => formAsignar.handleSubmit()} submitLabel={saving ? "Guardando…" : "Asignar"}>
+        <TextField form={formAsignar} name="monto" label="Monto" type="number" min="0.01" step="0.01" />
+        <TextField form={formAsignar} name="descripcion" label="Nota" placeholder="Fondo inicial" />
       </Modal>
 
-      <Modal open={modalAumento} title="Aumentar caja" onClose={() => setModalAumento(false)} onSubmit={() => enviar("aumento")} submitLabel={saving ? "Guardando…" : "Aumentar"}>
-        <Field label="Monto">
-          <input className={inputClass} type="number" min="0.01" step="0.01" value={form.monto} onChange={(e) => setForm({ ...form, monto: e.target.value })} />
-        </Field>
-        <Field label="Nota">
-          <input className={inputClass} value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Reposición" />
-        </Field>
+      <Modal open={modalAumento} title="Aumentar caja" onClose={() => setModalAumento(false)} onSubmit={() => formAumento.handleSubmit()} submitLabel={saving ? "Guardando…" : "Aumentar"}>
+        <TextField form={formAumento} name="monto" label="Monto" type="number" min="0.01" step="0.01" />
+        <TextField form={formAumento} name="descripcion" label="Nota" placeholder="Reposición" />
       </Modal>
 
-      <Modal open={modalGasto} title="Registrar gasto" onClose={() => setModalGasto(false)} onSubmit={() => enviar("gasto")} submitLabel={saving ? "Guardando…" : "Registrar"}>
-        <Field label="Categoría">
-          <select className={selectClass} value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
-            {!categorias.length && <option value="">Sin categorías</option>}
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>{c.nombre}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Monto">
-          <input className={inputClass} type="number" min="0.01" step="0.01" value={form.monto} onChange={(e) => setForm({ ...form, monto: e.target.value })} />
-        </Field>
-        <Field label="Detalle">
-          <input className={inputClass} value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Ej. peaje Serpentín" />
-        </Field>
+      <Modal open={modalGasto} title="Registrar gasto" onClose={() => setModalGasto(false)} onSubmit={() => formGasto.handleSubmit()} submitLabel={saving ? "Guardando…" : "Registrar"}>
+        <SelectField form={formGasto} name="categoria" label="Categoría">
+          {!categorias.length && <option value="">Sin categorías</option>}
+          {categorias.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </SelectField>
+        <TextField form={formGasto} name="monto" label="Monto" type="number" min="0.01" step="0.01" />
+        <TextField form={formGasto} name="descripcion" label="Detalle" placeholder="Ej. peaje Serpentín" />
       </Modal>
 
       <Modal open={modalCerrar} title="Cerrar caja chica" onClose={() => setModalCerrar(false)} onSubmit={cerrarCaja} submitLabel={saving ? "Cerrando…" : "Cerrar caja"}>
@@ -469,17 +461,10 @@ export function GastosPage() {
         open={modalCategoria}
         title="Nueva categoría"
         onClose={() => setModalCategoria(false)}
-        onSubmit={crearCategoria}
+        onSubmit={() => formCategoria.handleSubmit()}
         submitLabel={saving ? "Guardando…" : "Crear"}
       >
-        <Field label="Nombre">
-          <input
-            className={inputClass}
-            value={nombreCategoria}
-            onChange={(e) => setNombreCategoria(e.target.value)}
-            placeholder="Ej. Estacionamiento"
-          />
-        </Field>
+        <TextField form={formCategoria} name="nombre" label="Nombre" placeholder="Ej. Estacionamiento" />
       </Modal>
 
       <ConfirmModal

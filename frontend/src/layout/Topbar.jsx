@@ -1,39 +1,42 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { NotificacionService } from "@/service/api";
 import { etiquetaRol } from "@/utils/roles";
 import { formatDateTime } from "@/utils/format";
+import { useApiList } from "@/hooks/useApiQuery";
+import { qk } from "@/query/keys";
 
 export function Topbar({ title, children }) {
   const { user, can } = useAuth();
   const navigate = useNavigate();
-  const [notifs, setNotifs] = useState([]);
-
-  const loadNotifs = () => {
-    if (!can("flota")) return;
-    NotificacionService.getAll()
-      .then((res) => setNotifs(res.data || []))
-      .catch(() => setNotifs([]));
-  };
-
-  useEffect(() => { loadNotifs(); }, [user]);
+  const queryClient = useQueryClient();
+  const puedeFlota = can("flota");
+  const { data: notifs = [] } = useApiList(
+    qk.notificaciones,
+    () => NotificacionService.getAll(),
+    { enabled: puedeFlota, staleTime: 60_000 },
+  );
 
   const unread = notifs.filter((n) => !n.leida).length;
+
+  const marcarLocal = (updater) => {
+    queryClient.setQueryData(qk.notificaciones, (prev) => (Array.isArray(prev) ? updater(prev) : prev));
+  };
 
   const abrir = async (n) => {
     if (!n.leida) {
       try { await NotificacionService.leer(n.id); } catch { /* ignore */ }
     }
-    setNotifs((prev) => prev.map((x) => (x.id === n.id ? { ...x, leida: true } : x)));
+    marcarLocal((prev) => prev.map((x) => (x.id === n.id ? { ...x, leida: true } : x)));
     navigate("/flota");
   };
 
   const leerTodas = async () => {
     try {
       await NotificacionService.leerTodas();
-      setNotifs((prev) => prev.map((n) => ({ ...n, leida: true })));
+      marcarLocal((prev) => prev.map((n) => ({ ...n, leida: true })));
     } catch { /* ignore */ }
   };
 
