@@ -14,7 +14,7 @@ export const qk = {
   categoriasGasto: ["categorias-gasto"],
   fallas: ["fallas"],
   mantenimientos: ["mantenimientos"],
-  documentos: (params) => ["documentos", params],
+  documentos: ["documentos"],
   tiposFalla: ["tipos-falla"],
   tiposServicio: ["tipos-servicio"],
   servicios: ["servicios-vehiculo"],

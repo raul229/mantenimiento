@@ -30,7 +30,7 @@ export function Topbar({ title, children }) {
       try { await NotificacionService.leer(n.id); } catch { /* ignore */ }
     }
     marcarLocal((prev) => prev.map((x) => (x.id === n.id ? { ...x, leida: true } : x)));
-    navigate("/flota");
+    navigate(n.tipo === "documento" ? "/flota?tab=documentos" : "/flota");
   };
 
   const leerTodas = async () => {

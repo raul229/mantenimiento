@@ -205,10 +205,12 @@ class Notificacion(models.Model):
     FALLA = 'falla'
     PREVENTIVO = 'preventivo'
     TALLER = 'taller'
+    DOCUMENTO = 'documento'
     TIPO_CHOICES = (
         (FALLA, 'Falla'),
         (PREVENTIVO, 'Preventivo'),
         (TALLER, 'Taller'),
+        (DOCUMENTO, 'Documento'),
     )
 
     usuario = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notificaciones')
@@ -240,13 +242,16 @@ class Documento(models.Model):
         ('cliente', 'cliente'),
     )
     TIPO_DOCUMENTOS_CHOICES = (
-        ('certificacion', 'certificacion'),
-        ('soat', 'soat'),
-        ('licencia', 'licencia'),
-        ('seguro', 'seguro'),
-        ('contrato', 'contrato'),
-        ('manifiesto', 'manifiesto'),
-        ('revision_tecnica', 'revision_tecnica'),
+        ('soat', 'SOAT'),
+        ('revision_tecnica', 'Revisión técnica'),
+        ('seguro', 'Seguro'),
+        ('certificacion', 'Certificación'),
+        ('contrato', 'Contrato'),
+        ('manifiesto', 'Manifiesto'),
+        ('licencia', 'Licencia de conducir'),
+        ('permiso_residuos', 'Permiso residuos peligrosos'),
+        ('certificado_medico', 'Certificado médico'),
+        ('curso_peligrosos', 'Curso mercancías peligrosas'),
     )
     ESTADO_DOCUMENTO_CHOICES = (
         ('activo', 'activo'),

@@ -157,6 +157,12 @@ class FallaSimpleSerializer(serializers.ModelSerializer):
 
 class DocumentoSerializer(serializers.ModelSerializer):
     archivo_url = serializers.SerializerMethodField()
+    vehiculo = serializers.SerializerMethodField()
+    conductor = serializers.SerializerMethodField()
+    tipo_label = serializers.CharField(source='get_tipo_documento_display', read_only=True)
+    estado_alerta = serializers.SerializerMethodField()
+    dias_para_vencer = serializers.SerializerMethodField()
+    fecha_emision = OptionalDateField(required=False, allow_null=True)
 
     class Meta:
         model = Documento
@@ -168,6 +174,59 @@ class DocumentoSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         url = obj.archivo.url
         return request.build_absolute_uri(url) if request else url
+
+    def get_vehiculo(self, obj):
+        if obj.tipo_entidad != 'vehiculo':
+            return None
+        cache = self.context.setdefault('_vehiculos', {})
+        if obj.entidad_id not in cache:
+            cache[obj.entidad_id] = Vehiculo.objects.filter(pk=obj.entidad_id).only(
+                'id', 'placa', 'marca', 'modelo',
+            ).first()
+        vehiculo = cache[obj.entidad_id]
+        if not vehiculo:
+            return None
+        return {'id': vehiculo.id, 'placa': vehiculo.placa, 'marca': vehiculo.marca, 'modelo': vehiculo.modelo}
+
+    def get_conductor(self, obj):
+        if obj.tipo_entidad != 'user':
+            return None
+        cache = self.context.setdefault('_conductores', {})
+        if obj.entidad_id not in cache:
+            cache[obj.entidad_id] = User.objects.filter(pk=obj.entidad_id).first()
+        conductor = cache[obj.entidad_id]
+        if not conductor:
+            return None
+        return {
+            'id': conductor.id,
+            'nombre': conductor.get_full_name() or conductor.username,
+            'username': conductor.username,
+        }
+
+    def get_estado_alerta(self, obj):
+        return services.estado_alerta_documento(obj)
+
+    def get_dias_para_vencer(self, obj):
+        return services.dias_para_vencer(obj)
+
+    def validate(self, attrs):
+        emision = attrs.get('fecha_emision', getattr(self.instance, 'fecha_emision', None))
+        vence = attrs.get('fecha_vencimiento', getattr(self.instance, 'fecha_vencimiento', None))
+        if not vence:
+            raise serializers.ValidationError({'fecha_vencimiento': 'Indica la fecha de vencimiento.'})
+        if emision and vence < emision:
+            raise serializers.ValidationError({'fecha_vencimiento': 'El vencimiento no puede ser anterior a la emisión.'})
+        tipo = attrs.get('tipo_entidad', getattr(self.instance, 'tipo_entidad', 'vehiculo'))
+        entidad_id = attrs.get('entidad_id', getattr(self.instance, 'entidad_id', None))
+        if tipo == 'vehiculo' and not Vehiculo.objects.filter(pk=entidad_id).exists():
+            raise serializers.ValidationError({'entidad_id': 'Elige un vehículo.'})
+        if tipo == 'user' and not User.objects.filter(pk=entidad_id, is_active=True).exists():
+            raise serializers.ValidationError({'entidad_id': 'Elige un conductor.'})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.setdefault('tipo_entidad', 'vehiculo')
+        return super().create(validated_data)
 
 
 class MantenimientoGastoSerializer(serializers.ModelSerializer):

@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Plus, Truck } from "lucide-react";
 import {
   DocumentoService, FallaService, MantenimientoService, ServicioVehiculoService,
-  TipoFallaService, TipoServicioService, VehiculoService,
+  TipoFallaService, TipoServicioService, UsuarioService, VehiculoService,
 } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Modal } from "@/components/Modal";
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { ESTADO_FLOTA, ESTADO_SERVICIO, formatKm } from "@/utils/format";
+import { ESTADO_FLOTA, ESTADO_SERVICIO, formatDate, formatKm } from "@/utils/format";
 import { useAuth } from "@/context/AuthContext";
 import { FallasTab } from "@/pages/flota/FallasTab";
 import { OrdenesTab } from "@/pages/flota/OrdenesTab";
 import { PreventivosTab } from "@/pages/flota/PreventivosTab";
+import { DocumentosTab } from "@/pages/flota/DocumentosTab";
 import { useApiList, useInvalidate } from "@/hooks/useApiQuery";
 import { qk } from "@/query/keys";
 import { TextField } from "@/components/AppForm";
@@ -86,7 +88,11 @@ export function FlotaPage() {
   const puedeReportar = canWrite("flota");
 
   const invalidate = useInvalidate();
-  const [tab, setTab] = useState("flota");
+  const [params, setParams] = useSearchParams();
+  const tabInicial = ["flota", "fallas", "ordenes", "preventivos", "documentos"].includes(params.get("tab"))
+    ? params.get("tab")
+    : "flota";
+  const [tab, setTab] = useState(tabInicial);
   const [selectedId, setSelectedId] = useState(null);
   const [modal, setModal] = useState(false);
   const [borrar, setBorrar] = useState(null);
@@ -98,10 +104,15 @@ export function FlotaPage() {
     () => MantenimientoService.getAll(),
     { enabled: tab === "flota" || tab === "ordenes" },
   );
-  const { data: documentos = [] } = useApiList(
-    qk.documentos({ tipo_entidad: "vehiculo" }),
-    () => DocumentoService.getAll({ tipo_entidad: "vehiculo" }),
+  const { data: documentos = [], isLoading: loadingDocs } = useApiList(
+    qk.documentos,
+    () => DocumentoService.getAll(),
     { enabled: tab === "flota" || tab === "documentos" },
+  );
+  const { data: conductores = [] } = useApiList(
+    qk.usuarios,
+    () => UsuarioService.getAll(),
+    { enabled: tab === "documentos" },
   );
   const { data: fallas = [], isLoading: loadingFallas } = useApiList(
     qk.fallas,
@@ -120,7 +131,13 @@ export function FlotaPage() {
     { enabled: tab === "flota" || tab === "preventivos" },
   );
   const selected = vehiculos.find((v) => v.id === selectedId) || null;
-  const loading = tab === "flota" ? loadingFlota : tab === "fallas" ? loadingFallas : tab === "ordenes" ? loadingOrdenes : tab === "preventivos" ? loadingPrev : false;
+  const loading = tab === "flota" ? loadingFlota : tab === "fallas" ? loadingFallas : tab === "ordenes" ? loadingOrdenes : tab === "preventivos" ? loadingPrev : tab === "documentos" ? loadingDocs : false;
+
+  const irTab = (id) => {
+    setTab(id);
+    setQ("");
+    setParams(id === "flota" ? {} : { tab: id }, { replace: true });
+  };
 
   const recargar = () => invalidate(
     qk.vehiculos,
@@ -129,7 +146,7 @@ export function FlotaPage() {
     qk.servicios,
     qk.tiposFalla,
     qk.tiposServicio,
-    qk.documentos({ tipo_entidad: "vehiculo" }),
+    qk.documentos,
     qk.notificaciones,
     qk.viajes,
   );
@@ -186,7 +203,7 @@ export function FlotaPage() {
     return ops;
   }, [vehiculos]);
 
-  const docsOf = (vehiculo) => documentos.filter((d) => d.entidad_id === vehiculo?.id);
+  const docsOf = (vehiculo) => documentos.filter((d) => d.tipo_entidad === "vehiculo" && d.entidad_id === vehiculo?.id);
   const mantsOf = (vehiculo) => mantenimientos.filter((m) => m.vehiculo?.id === vehiculo?.id);
   const preventivosOf = (vehiculo) => (vehiculo?.preventivos || servicios.filter((s) => s.vehiculo?.id === vehiculo?.id));
 
@@ -212,7 +229,7 @@ export function FlotaPage() {
             <button
               key={id}
               type="button"
-              onClick={() => { setTab(id); setQ(""); }}
+              onClick={() => irTab(id)}
               className={`btn btn-sm rounded-full ${tab === id ? "btn-primary" : "btn-ghost bg-base-100"}`}
             >
               {label}
@@ -285,13 +302,20 @@ export function FlotaPage() {
                 ))}
                 <h3 className="mb-2 mt-5 text-xs font-semibold uppercase text-muted">Documentos</h3>
                 {docsOf(selected).map((d) => (
-                  <p key={d.id} className="mb-1 text-sm capitalize">{d.tipo_documento.replace("_", " ")}</p>
+                  <p key={d.id} className="mb-1 flex justify-between gap-2 text-sm">
+                    <span>{d.tipo_label || d.tipo_documento.replace("_", " ")}</span>
+                    <span className="text-muted">{d.fecha_vencimiento ? formatDate(d.fecha_vencimiento) : "—"}</span>
+                  </p>
                 ))}
+                {!docsOf(selected).length && <p className="text-sm text-muted">Sin documentos</p>}
                 {puedeReportar && (
-                  <button type="button" className="btn btn-primary mt-4 w-full" onClick={() => setTab("fallas")}>
+                  <button type="button" className="btn btn-primary mt-4 w-full" onClick={() => irTab("fallas")}>
                     Reportar falla
                   </button>
                 )}
+                <button type="button" className="btn btn-ghost mt-2 w-full" onClick={() => irTab("documentos")}>
+                  Ver documentos
+                </button>
                 {puedeBorrar && (
                   <button type="button" className="btn btn-ghost btn-error mt-2 w-full" onClick={() => setBorrar(selected)}>
                     Eliminar vehículo
@@ -342,31 +366,17 @@ export function FlotaPage() {
         )}
 
         {tab === "documentos" && (
-          <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-muted">
-                <tr>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th>Número</th>
-                  <th>Vence</th>
-                  <th>Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {documentos.map((d) => (
-                  <tr key={d.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3 capitalize">{d.tipo_documento.replace("_", " ")}</td>
-                    <td>{d.numero_documento || "—"}</td>
-                    <td>{d.fecha_vencimiento || "—"}</td>
-                    <td className="capitalize">{d.estado}</td>
-                  </tr>
-                ))}
-                {!documentos.length && (
-                  <tr><td className="px-4 py-8 text-muted" colSpan={4}>Sin documentos de flota</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DocumentosTab
+            documentos={documentos}
+            vehiculos={vehiculos}
+            conductores={conductores}
+            loading={loading}
+            puedeTaller={puedeTaller}
+            puedeBorrar={puedeBorrar}
+            onReload={recargar}
+            q={q}
+            setQ={setQ}
+          />
         )}
       </div>
       <Modal open={modal} title="Nuevo vehículo" onClose={() => setModal(false)} onSubmit={() => form.handleSubmit()}>

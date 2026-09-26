@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from cuentas.models import solo_asignados
 from .models import Recojo, RecojoDetalle, Viaje, CajaMovimiento, Cliente, Ciudad
 from mantenimiento.models import Falla, Vehiculo
-from mantenimiento.services import alertas_de, asegurar_servicios
+from mantenimiento.services import alertas_de, asegurar_servicios, contar_alertas_documentos
 
 
 def _month_range(year, month):
@@ -172,6 +172,13 @@ class DashboardView(APIView):
                     preventivos_vencidos += 1
                 elif alerta['estado'] == 'por_vencer':
                     preventivos_por_vencer += 1
+        if solo_asignados(request.user):
+            documentos_vencidos, documentos_por_vencer = contar_alertas_documentos(
+                vehiculo_ids=[veh.id for veh in vehiculos],
+                user_ids=[request.user.id],
+            )
+        else:
+            documentos_vencidos, documentos_por_vencer = contar_alertas_documentos()
 
         return Response({
             'mes': f'{year:04d}-{month:02d}',
@@ -191,4 +198,6 @@ class DashboardView(APIView):
             'fallas_abiertas': fallas_abiertas,
             'preventivos_vencidos': preventivos_vencidos,
             'preventivos_por_vencer': preventivos_por_vencer,
+            'documentos_vencidos': documentos_vencidos,
+            'documentos_por_vencer': documentos_por_vencer,
         })

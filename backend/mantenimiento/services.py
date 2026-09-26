@@ -7,9 +7,11 @@ from django.utils import timezone
 from cuentas.models import solo_asignados
 from cuentas.permissions import puede_escribir
 from .models import (
-    Falla, HistorialServicio, Mantenimiento, MantenimientoGasto, Notificacion,
+    Documento, Falla, HistorialServicio, Mantenimiento, MantenimientoGasto, Notificacion,
     ServicioVehiculo, TipoServicio, Vehiculo,
 )
+
+DIAS_ALERTA_DOCUMENTO = 30
 
 
 def puede_gestionar_taller(user):
@@ -366,3 +368,115 @@ def cerrar_mantenimiento(mantenimiento, usuario, resultados=None, servicios=None
     _liberar_si_sin_taller(mantenimiento.vehiculo)
     sincronizar_preventivos(mantenimiento.vehiculo)
     return mantenimiento
+
+
+def estado_alerta_documento(doc, hoy=None):
+    hoy = hoy or timezone.now().date()
+    if doc.estado == 'inactivo':
+        return 'inactivo'
+    if not doc.fecha_vencimiento:
+        return 'sin_fecha'
+    dias = (doc.fecha_vencimiento - hoy).days
+    if dias < 0:
+        return 'vencido'
+    if dias <= DIAS_ALERTA_DOCUMENTO:
+        return 'por_vencer'
+    return 'vigente'
+
+
+def dias_para_vencer(doc, hoy=None):
+    if not doc.fecha_vencimiento:
+        return None
+    hoy = hoy or timezone.now().date()
+    return (doc.fecha_vencimiento - hoy).days
+
+
+def _titular_doc(doc):
+    if doc.tipo_entidad == 'vehiculo':
+        vehiculo = Vehiculo.objects.filter(pk=doc.entidad_id).first()
+        return {
+            'vehiculo': vehiculo,
+            'conductor': None,
+            'sujeto': vehiculo.placa if vehiculo else 'vehículo',
+        }
+    if doc.tipo_entidad == 'user':
+        from django.contrib.auth.models import User
+        conductor = User.objects.filter(pk=doc.entidad_id).first()
+        nombre = (conductor.get_full_name() or conductor.username) if conductor else 'conductor'
+        return {'vehiculo': None, 'conductor': conductor, 'sujeto': nombre}
+    return {'vehiculo': None, 'conductor': None, 'sujeto': doc.get_tipo_documento_display()}
+
+
+def sincronizar_documento(doc):
+    alerta = estado_alerta_documento(doc)
+    if alerta == 'vencido' and doc.estado != 'vencido':
+        doc.estado = 'vencido'
+        doc.save(update_fields=['estado'])
+    elif alerta in ('por_vencer', 'vigente') and doc.estado == 'vencido':
+        doc.estado = 'activo'
+        doc.save(update_fields=['estado'])
+
+    titular = _titular_doc(doc)
+    vehiculo = titular['vehiculo']
+    tipo = doc.get_tipo_documento_display()
+    sujeto = titular['sujeto']
+
+    if alerta in ('por_vencer', 'vencido'):
+        dias = dias_para_vencer(doc)
+        if alerta == 'vencido':
+            titulo = f'{tipo} vencido · {sujeto}'
+            mensaje = f'Venció el {doc.fecha_vencimiento:%d/%m/%Y}.'
+        else:
+            n = 0 if dias is None else dias
+            titulo = f'{tipo} por vencer · {sujeto}'
+            mensaje = f'Vence el {doc.fecha_vencimiento:%d/%m/%Y} ({n} {"día" if n == 1 else "días"}).'
+        destinatarios = list(usuarios_taller())
+        if titular['conductor']:
+            destinatarios.append(titular['conductor'])
+        elif vehiculo and vehiculo.conductor_asignado_id:
+            destinatarios.append(vehiculo.conductor_asignado)
+        notificar(
+            destinatarios,
+            Notificacion.DOCUMENTO,
+            titulo,
+            mensaje,
+            vehiculo=vehiculo,
+            clave=f'doc:{doc.id}:{alerta}',
+        )
+        otra = 'vencido' if alerta == 'por_vencer' else 'por_vencer'
+        Notificacion.objects.filter(clave=f'doc:{doc.id}:{otra}', leida=False).update(leida=True)
+    else:
+        Notificacion.objects.filter(clave__startswith=f'doc:{doc.id}:', leida=False).update(leida=True)
+    return alerta
+
+
+def sincronizar_documentos(vehiculo_ids=None, user_ids=None):
+    qs = Documento.objects.exclude(estado='inactivo')
+    if vehiculo_ids is not None or user_ids is not None:
+        filtro = Q()
+        if vehiculo_ids is not None:
+            filtro |= Q(tipo_entidad='vehiculo', entidad_id__in=vehiculo_ids)
+        if user_ids is not None:
+            filtro |= Q(tipo_entidad='user', entidad_id__in=user_ids)
+        qs = qs.filter(filtro)
+    for doc in qs:
+        sincronizar_documento(doc)
+
+
+def contar_alertas_documentos(vehiculo_ids=None, user_ids=None):
+    qs = Documento.objects.exclude(estado='inactivo')
+    if vehiculo_ids is not None or user_ids is not None:
+        filtro = Q()
+        if vehiculo_ids is not None:
+            filtro |= Q(tipo_entidad='vehiculo', entidad_id__in=vehiculo_ids)
+        if user_ids is not None:
+            filtro |= Q(tipo_entidad='user', entidad_id__in=user_ids)
+        qs = qs.filter(filtro)
+    vencidos = por_vencer = 0
+    for doc in qs:
+        alerta = estado_alerta_documento(doc)
+        if alerta == 'vencido':
+            vencidos += 1
+        elif alerta == 'por_vencer':
+            por_vencer += 1
+    return vencidos, por_vencer

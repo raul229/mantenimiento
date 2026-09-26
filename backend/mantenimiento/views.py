@@ -204,14 +204,51 @@ class DocumentoViewSet(viewsets.ModelViewSet):
     serializer_class = DocumentoSerializer
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        from cuentas.models import solo_asignados
+        visibles = list(services.vehiculos_visibles(self.request.user).values_list('id', flat=True))
+        if solo_asignados(self.request.user):
+            qs = Documento.objects.filter(
+                Q(tipo_entidad='vehiculo', entidad_id__in=visibles)
+                | Q(tipo_entidad='user', entidad_id=self.request.user.id),
+            )
+        else:
+            qs = Documento.objects.filter(
+                Q(tipo_entidad='vehiculo', entidad_id__in=visibles) | Q(tipo_entidad='user'),
+            )
         tipo_entidad = self.request.query_params.get('tipo_entidad')
         entidad_id = self.request.query_params.get('entidad_id')
         if tipo_entidad:
             qs = qs.filter(tipo_entidad=tipo_entidad)
         if entidad_id:
             qs = qs.filter(entidad_id=entidad_id)
-        return qs
+        return qs.order_by('fecha_vencimiento', 'id')
+
+    def create(self, request, *args, **kwargs):
+        if error := _oficina_o_403(request):
+            return error
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if error := _oficina_o_403(request):
+            return error
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if error := _oficina_o_403(request):
+            return error
+        return super().destroy(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        doc = serializer.save()
+        services.sincronizar_documento(doc)
+
+    def perform_update(self, serializer):
+        doc = serializer.save()
+        services.sincronizar_documento(doc)
+
+    def perform_destroy(self, instance):
+        Notificacion.objects.filter(clave__startswith=f'doc:{instance.id}:').delete()
+        instance.delete()
 
 
 class FallaViewSet(viewsets.ModelViewSet):
@@ -368,8 +405,17 @@ class NotificacionViewSet(viewsets.ReadOnlyModelViewSet):
         return Notificacion.objects.select_related('vehiculo').filter(usuario=self.request.user)
 
     def list(self, request, *args, **kwargs):
-        for vehiculo in services.vehiculos_visibles(request.user):
+        visibles = list(services.vehiculos_visibles(request.user))
+        for vehiculo in visibles:
             services.sincronizar_preventivos(vehiculo)
+        from cuentas.models import solo_asignados
+        if solo_asignados(request.user):
+            services.sincronizar_documentos(
+                vehiculo_ids=[v.id for v in visibles],
+                user_ids=[request.user.id],
+            )
+        else:
+            services.sincronizar_documentos()
         return super().list(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'])

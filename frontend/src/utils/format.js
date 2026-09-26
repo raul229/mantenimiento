@@ -116,6 +116,37 @@ export const ESTADO_SERVICIO = {
   sin_registro: { label: "Sin registro", className: "badge-ghost" },
 };
 
+export const ESTADO_DOCUMENTO = {
+  vencido: { label: "Vencido", className: "badge-error" },
+  por_vencer: { label: "Por vencer", className: "badge-warning" },
+  vigente: { label: "Vigente", className: "badge-success" },
+  inactivo: { label: "Inactivo", className: "badge-ghost" },
+  sin_fecha: { label: "Sin fecha", className: "badge-ghost" },
+};
+
+export const TIPO_DOCUMENTO_VEHICULO = {
+  soat: "SOAT",
+  revision_tecnica: "Revisión técnica",
+  seguro: "Seguro",
+  certificacion: "Certificación",
+  contrato: "Contrato",
+  manifiesto: "Manifiesto",
+};
+
+export const TIPO_DOCUMENTO_CONDUCTOR = {
+  licencia: "Licencia de conducir",
+  permiso_residuos: "Permiso residuos peligrosos",
+  certificado_medico: "Certificado médico",
+  curso_peligrosos: "Curso mercancías peligrosas",
+};
+
+export const TIPO_DOCUMENTO = { ...TIPO_DOCUMENTO_VEHICULO, ...TIPO_DOCUMENTO_CONDUCTOR };
+
+export function titularDocumento(d) {
+  if (d?.tipo_entidad === "user") return d.conductor?.nombre || "Conductor";
+  return d?.vehiculo?.placa || "Vehículo";
+}
+
 export const CATEGORIA_TALLER = {
   repuesto: "Repuesto",
   mano_obra: "Mano de obra",

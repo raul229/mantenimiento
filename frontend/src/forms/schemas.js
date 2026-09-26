@@ -41,6 +41,26 @@ export const vehiculoSchema = z.object({
   kilometraje_actual: z.coerce.number().min(0, "Kilometraje inválido"),
 });
 
+export const documentoSchema = z.object({
+  tipo_entidad: z.enum(["vehiculo", "user"]),
+  vehiculo: z.string(),
+  conductor: z.string(),
+  tipo_documento: z.string().min(1, "Elige el tipo"),
+  numero_documento: z.string(),
+  fecha_emision: z.string(),
+  fecha_vencimiento: z.string().min(1, "Indica la fecha de vencimiento"),
+}).superRefine((value, ctx) => {
+  if (value.tipo_entidad === "vehiculo" && !value.vehiculo) {
+    ctx.addIssue({ code: "custom", path: ["vehiculo"], message: "Elige un vehículo" });
+  }
+  if (value.tipo_entidad === "user" && !value.conductor) {
+    ctx.addIssue({ code: "custom", path: ["conductor"], message: "Elige un conductor" });
+  }
+  if (value.fecha_emision && value.fecha_vencimiento && value.fecha_vencimiento < value.fecha_emision) {
+    ctx.addIssue({ code: "custom", path: ["fecha_vencimiento"], message: "El vencimiento no puede ser anterior a la emisión" });
+  }
+});
+
 export const montoSchema = z.object({
   monto: z.coerce.number().positive("Indica un monto"),
   descripcion: z.string(),
