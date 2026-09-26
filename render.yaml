@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: sermin-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen --no-dev && uv run python manage.py collectstatic --no-input && uv run python manage.py migrate
+    startCommand: uv run gunicorn api.wsgi:application --bind 0.0.0.0:$PORT --timeout 120
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: DB_SSL_REQUIRE
+        value: "True"
+      - key: DB_CONN_MAX_AGE
+        value: "0"

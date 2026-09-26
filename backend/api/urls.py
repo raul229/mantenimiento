@@ -5,13 +5,14 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .api_urls import router
-from .auth_views import me, usuarios_mini
+from .auth_views import health, me, usuarios_mini
 from ruta.dashboard import DashboardView
 from ruta.views import ConfiguracionEmisorView
 from mantenimiento.views import AlertasTallerView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/health/', health),
     path('api/auth/token/', TokenObtainPairView.as_view()),
     path('api/auth/refresh/', TokenRefreshView.as_view()),
     path('api/auth/me/', me),
@@ -22,5 +23,4 @@ urlpatterns = [
     path('api/', include(router.urls)),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
