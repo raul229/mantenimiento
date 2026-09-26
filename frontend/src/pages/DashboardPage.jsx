@@ -1,13 +1,13 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { Scale, Truck, Users, Wallet } from "lucide-react";
 import { DashboardService, CiudadService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
 import { KpiCard } from "@/components/KpiCard";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ESTADO_VIAJE, ESTADO_FLOTA, formatKg, formatMoney, monthISO } from "@/utils/format";
+import { ESTADO_VIAJE, ESTADO_FLOTA, ESTADO_DOCUMENTO, formatDate, formatDateTime, formatKg, formatMoney, monthISO } from "@/utils/format";
 import { inputClass } from "@/components/Modal";
 import { CiudadFields, NuevaCiudadModal } from "@/components/CiudadSelect";
 import { useAuth } from "@/context/AuthContext";
@@ -26,11 +26,6 @@ export function DashboardPage() {
     queryFn: async () => (await DashboardService.get({ mes, ciudad: ciudad || undefined })).data,
     placeholderData: keepPreviousData,
   });
-
-  const residueTotal = useMemo(
-    () => (data?.residuos || []).reduce((s, r) => s + Number(r.peso || 0), 0),
-    [data],
-  );
 
   if (loading && !data) {
     return (
@@ -86,70 +81,73 @@ export function DashboardPage() {
             accent="bg-rose-50 text-rose-600"
           />
         </div>
-        {can("flota") && (d.fallas_abiertas || d.preventivos_vencidos || d.preventivos_por_vencer || d.documentos_vencidos || d.documentos_por_vencer) ? (
-          <button
-            type="button"
-            className="flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-left text-sm text-amber-900"
-            onClick={() => navigate(d.documentos_vencidos || d.documentos_por_vencer ? "/flota?tab=documentos" : "/flota")}
-          >
-            <span className="font-medium">Taller</span>
-            <span>
-              {d.fallas_abiertas ? `${d.fallas_abiertas} fallas abiertas` : ""}
-              {d.preventivos_vencidos ? ` · ${d.preventivos_vencidos} servicios vencidos` : ""}
-              {d.preventivos_por_vencer ? ` · ${d.preventivos_por_vencer} por vencer` : ""}
-              {d.documentos_vencidos ? ` · ${d.documentos_vencidos} docs vencidos` : ""}
-              {d.documentos_por_vencer ? ` · ${d.documentos_por_vencer} docs por vencer` : ""}
-            </span>
-          </button>
-        ) : null}
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="card bg-base-100 shadow-sm">
-            <div className="card-body p-5">
-              <h2 className="card-title mb-2 text-base">Residuos por tipo (kg)</h2>
-              <div className="flex items-center gap-6">
-                <div className="h-52 w-52">
-                  <ResponsiveContainer>
-                    <PieChart>
-                      <Pie data={d.residuos || []} dataKey="peso" nameKey="nombre" innerRadius={55} outerRadius={80}>
-                        {(d.residuos || []).map((r) => (
-                          <Cell key={r.codigo} fill={r.color || "#0f9d8e"} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
+        {can("flota") && (
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="card bg-base-100 shadow-sm">
+              <div className="card-body p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="card-title text-base">Avisos</h2>
+                  <button type="button" className="btn btn-link btn-sm text-primary no-underline" onClick={() => navigate("/flota")}>
+                    Ver flota →
+                  </button>
                 </div>
-                <ul className="flex-1 space-y-2 text-sm">
-                  {(d.residuos || []).map((r) => (
-                    <li key={r.codigo} className="flex items-center justify-between gap-3">
-                      <span className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: r.color }} />
-                        {r.nombre}
-                      </span>
-                      <span className="font-medium">{formatKg(r.peso)}</span>
+                <ul className="space-y-2">
+                  {(d.avisos || []).map((n) => (
+                    <li key={n.id}>
+                      <button
+                        type="button"
+                        className={`w-full rounded-xl px-3 py-2 text-left ${n.leida ? "bg-base-200/60" : "bg-amber-50"}`}
+                        onClick={() => navigate(n.tipo === "documento" ? "/flota?tab=documentos" : "/flota")}
+                      >
+                        <p className="text-sm font-medium">{n.titulo}</p>
+                        <p className="text-xs text-muted">{n.mensaje}</p>
+                        <p className="mt-1 text-xs text-muted">{formatDateTime(n.creado_en)}</p>
+                      </button>
                     </li>
                   ))}
-                  {!(d.residuos || []).length && <li className="text-muted">Sin datos de residuos</li>}
-                  {residueTotal > 0 && (
-                    <li className="border-t border-base-300 pt-2 font-semibold">{formatKg(residueTotal)}</li>
+                  {!(d.avisos || []).length && <li className="py-6 text-center text-sm text-muted">Sin avisos</li>}
+                </ul>
+              </div>
+            </div>
+            <div className="card bg-base-100 shadow-sm">
+              <div className="card-body p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="card-title text-base">Documentos por vencer</h2>
+                  <button type="button" className="btn btn-link btn-sm text-primary no-underline" onClick={() => navigate("/flota?tab=documentos")}>
+                    Ver todos →
+                  </button>
+                </div>
+                <ul className="space-y-2">
+                  {(d.documentos_alerta || []).map((doc) => (
+                    <li key={doc.id} className="flex items-center justify-between gap-3 rounded-xl bg-base-200/70 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium">{doc.tipo_label}</p>
+                        <p className="text-xs text-muted">{doc.titular} · {formatDate(doc.fecha_vencimiento)}</p>
+                      </div>
+                      <StatusBadge map={ESTADO_DOCUMENTO} value={doc.estado_alerta} />
+                    </li>
+                  ))}
+                  {!(d.documentos_alerta || []).length && (
+                    <li className="py-6 text-center text-sm text-muted">Nada por vencer</li>
                   )}
                 </ul>
               </div>
             </div>
           </div>
-          <div className="card bg-base-100 shadow-sm">
-            <div className="card-body p-5">
-              <h2 className="card-title mb-2 text-base">Recojo por ciudad</h2>
-              <div className="h-52">
-                <ResponsiveContainer>
-                  <BarChart data={d.recojo_por_ciudad || []} layout="vertical" margin={{ left: 24, right: 12 }}>
-                    <XAxis type="number" hide />
-                    <YAxis type="category" dataKey="ciudad" width={90} tick={{ fontSize: 12 }} />
-                    <Tooltip formatter={(v) => formatKg(v)} />
-                    <Bar dataKey="peso" fill="#0f766e" radius={[0, 8, 8, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+        )}
+
+        <div className="card bg-base-100 shadow-sm">
+          <div className="card-body p-5">
+            <h2 className="card-title mb-2 text-base">Recojo por ciudad</h2>
+            <div className="h-52">
+              <ResponsiveContainer>
+                <BarChart data={d.recojo_por_ciudad || []} layout="vertical" margin={{ left: 24, right: 12 }}>
+                  <XAxis type="number" hide />
+                  <YAxis type="category" dataKey="ciudad" width={90} tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v) => formatKg(v)} />
+                  <Bar dataKey="peso" fill="#0f766e" radius={[0, 8, 8, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </div>

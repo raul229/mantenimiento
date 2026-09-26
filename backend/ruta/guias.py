@@ -100,20 +100,12 @@ def emitir_guia(recojo, usuario=None, config=None, fecha_traslado=None):
 
 
 def _crear_items(guia, recojo):
-    """Detalla los residuos por tipo y cuadra el resto contra el peso del recojo."""
     total = recojo.peso_kg or Decimal('0')
-    items = [
-        GuiaRemisionItem(guia=guia, descripcion=d.tipo.nombre, cantidad=d.peso_kg)
-        for d in recojo.detalles.select_related('tipo').all()
-    ]
-    resto = total - sum((i.cantidad for i in items), Decimal('0'))
-    if resto > 0 or not items:
-        items.append(GuiaRemisionItem(
-            guia=guia,
-            descripcion='Residuos sólidos sin clasificar' if items else 'Residuos sólidos',
-            cantidad=resto if items else total,
-        ))
-    GuiaRemisionItem.objects.bulk_create(items)
+    GuiaRemisionItem.objects.create(
+        guia=guia,
+        descripcion='Residuos sólidos',
+        cantidad=total,
+    )
 
 
 def emitir_guias(recojos, usuario=None, fecha_traslado=None):

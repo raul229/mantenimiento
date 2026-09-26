@@ -9,13 +9,13 @@ from cuentas.models import solo_asignados
 from . import caja as caja_service
 from .models import (
     Ciudad, Cliente, Sede, Ruta, Viaje, Recojo, Celular, Persona,
-    TipoResiduo, RecojoDetalle, ViajeGasto, CajaViaje, CajaMovimiento, CategoriaGasto,
+    ViajeGasto, CajaViaje, CajaMovimiento, CategoriaGasto,
     ConfiguracionEmisor, GuiaRemision,
 )
 from .serializers import (
     CiudadSerializer, ClienteSerializer, SedeSerializer, RutaSerializer,
     ViajeSerializer, RecojoSerializer, CelularSerializer, PersonaSerializer,
-    TipoResiduoSerializer, RecojoDetalleSerializer, ViajeGastoSerializer,
+    ViajeGastoSerializer,
     CajaViajeSerializer, CategoriaGastoSerializer, ConfiguracionEmisorSerializer, GuiaRemisionSerializer,
 )
 from . import guias as guias_service
@@ -125,7 +125,7 @@ class RecojoViewSet(viewsets.ModelViewSet):
         'sede__cliente__persona',
         'sede__ciudad',
         'guia',
-    ).prefetch_related('detalles__tipo').order_by('-fecha', '-id')
+    ).order_by('-fecha', '-id')
     serializer_class = RecojoSerializer
 
     def get_queryset(self):
@@ -133,18 +133,6 @@ class RecojoViewSet(viewsets.ModelViewSet):
         if solo_asignados(self.request.user):
             qs = qs.filter(viaje__conductor=self.request.user)
         return qs
-
-
-class TipoResiduoViewSet(viewsets.ModelViewSet):
-    modulo = 'recojos'
-    queryset = TipoResiduo.objects.all()
-    serializer_class = TipoResiduoSerializer
-
-
-class RecojoDetalleViewSet(viewsets.ModelViewSet):
-    modulo = 'recojos'
-    queryset = RecojoDetalle.objects.select_related('tipo', 'recojo').all()
-    serializer_class = RecojoDetalleSerializer
 
 
 class ViajeGastoViewSet(viewsets.ModelViewSet):
@@ -362,7 +350,7 @@ class GuiaRemisionViewSet(viewsets.ModelViewSet):
         qs = Recojo.objects.select_related(
             'sede__cliente__empresa', 'sede__cliente__persona', 'sede__ciudad',
             'viaje__vehiculo', 'viaje__conductor',
-        ).prefetch_related('detalles__tipo')
+        )
         if viaje_id:
             return list(qs.filter(viaje_id=viaje_id).order_by('id'))
         return list(qs.filter(pk__in=ids).order_by('id'))

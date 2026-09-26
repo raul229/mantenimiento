@@ -463,7 +463,7 @@ def sincronizar_documentos(vehiculo_ids=None, user_ids=None):
         sincronizar_documento(doc)
 
 
-def contar_alertas_documentos(vehiculo_ids=None, user_ids=None):
+def _documentos_visibles(vehiculo_ids=None, user_ids=None):
     qs = Documento.objects.exclude(estado='inactivo')
     if vehiculo_ids is not None or user_ids is not None:
         filtro = Q()
@@ -472,11 +472,38 @@ def contar_alertas_documentos(vehiculo_ids=None, user_ids=None):
         if user_ids is not None:
             filtro |= Q(tipo_entidad='user', entidad_id__in=user_ids)
         qs = qs.filter(filtro)
+    return qs
+
+
+def contar_alertas_documentos(vehiculo_ids=None, user_ids=None):
     vencidos = por_vencer = 0
-    for doc in qs:
+    for doc in _documentos_visibles(vehiculo_ids, user_ids):
         alerta = estado_alerta_documento(doc)
         if alerta == 'vencido':
             vencidos += 1
         elif alerta == 'por_vencer':
             por_vencer += 1
     return vencidos, por_vencer
+
+
+def listar_alertas_documentos(vehiculo_ids=None, user_ids=None, limite=8):
+    items = []
+    for doc in _documentos_visibles(vehiculo_ids, user_ids):
+        alerta = estado_alerta_documento(doc)
+        if alerta not in ('vencido', 'por_vencer'):
+            continue
+        titular = _titular_doc(doc)
+        items.append({
+            'id': doc.id,
+            'tipo_label': doc.get_tipo_documento_display(),
+            'titular': titular['sujeto'],
+            'tipo_entidad': doc.tipo_entidad,
+            'fecha_vencimiento': doc.fecha_vencimiento.isoformat() if doc.fecha_vencimiento else None,
+            'estado_alerta': alerta,
+            'dias_para_vencer': dias_para_vencer(doc),
+        })
+    items.sort(key=lambda a: (
+        0 if a['estado_alerta'] == 'vencido' else 1,
+        a['dias_para_vencer'] if a['dias_para_vencer'] is not None else 9999,
+    ))
+    return items[:limite]

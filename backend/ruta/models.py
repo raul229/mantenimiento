@@ -231,28 +231,6 @@ class Recojo(models.Model):
         ]
 
 
-class TipoResiduo(models.Model):
-    codigo = models.CharField(max_length=30, unique=True)
-    nombre = models.CharField(max_length=80)
-    color = models.CharField(max_length=16, default='#14b8a6')
-    orden = models.IntegerField(default=0)
-
-    class Meta:
-        ordering = ['orden', 'id']
-
-    def __str__(self):
-        return self.nombre
-
-
-class RecojoDetalle(models.Model):
-    recojo = models.ForeignKey(Recojo, on_delete=models.CASCADE, related_name='detalles')
-    tipo = models.ForeignKey(TipoResiduo, on_delete=models.CASCADE, related_name='detalles')
-    peso_kg = models.DecimalField(max_digits=10, decimal_places=2)
-
-    class Meta:
-        unique_together = ('recojo', 'tipo')
-
-
 class ViajeGasto(models.Model):
     TIPO_CHOICES = (
         ('combustible', 'Combustible'),

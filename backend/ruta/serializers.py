@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from .models import (
     Ciudad, Cliente, Empresa, Sede, Ruta, Viaje, Recojo, Celular, Persona,
-    TipoResiduo, RecojoDetalle, ViajeGasto, CajaViaje, CajaMovimiento, CategoriaGasto,
+    ViajeGasto, CajaViaje, CajaMovimiento, CategoriaGasto,
     ConfiguracionEmisor, GuiaRemision, GuiaRemisionItem,
 )
 from .documentos import clasificar_documento
@@ -401,25 +401,6 @@ class RutaSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class TipoResiduoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TipoResiduo
-        fields = '__all__'
-
-
-class RecojoDetalleSerializer(serializers.ModelSerializer):
-    tipo_data = TipoResiduoSerializer(source='tipo', read_only=True)
-
-    class Meta:
-        model = RecojoDetalle
-        fields = '__all__'
-
-
-class RecojoDetalleInputSerializer(serializers.Serializer):
-    tipo = serializers.PrimaryKeyRelatedField(queryset=TipoResiduo.objects.all())
-    peso_kg = serializers.DecimalField(max_digits=10, decimal_places=2)
-
-
 class ViajeGastoSerializer(serializers.ModelSerializer):
     class Meta:
         model = ViajeGasto
@@ -564,7 +545,6 @@ class RecojoSerializer(serializers.ModelSerializer):
     sede_direccion = serializers.CharField(source='sede.direccion', read_only=True, default=None, allow_null=True)
     cliente_nombre = serializers.CharField(source='sede.cliente.razon_social', read_only=True, default=None, allow_null=True)
     ciudad_nombre = serializers.CharField(source='sede.ciudad.nombre', read_only=True, default=None, allow_null=True)
-    detalles = RecojoDetalleSerializer(many=True, read_only=True)
     viaje_ruta = serializers.CharField(source='viaje.ruta.nombre', read_only=True, default=None, allow_null=True)
     vehiculo_placa = serializers.CharField(source='viaje.vehiculo.placa', read_only=True, default=None, allow_null=True)
     guia_id = serializers.IntegerField(source='guia.id', read_only=True, default=None, allow_null=True)

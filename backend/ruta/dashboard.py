@@ -7,9 +7,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from cuentas.models import solo_asignados
-from .models import Recojo, RecojoDetalle, Viaje, CajaMovimiento, Cliente, Ciudad
-from mantenimiento.models import Falla, Vehiculo
-from mantenimiento.services import alertas_de, asegurar_servicios, contar_alertas_documentos
+from .models import Recojo, Viaje, CajaMovimiento, Cliente, Ciudad
+from mantenimiento.models import Falla, Notificacion, Vehiculo
+from mantenimiento.services import (
+    alertas_de, asegurar_servicios, contar_alertas_documentos, listar_alertas_documentos,
+)
 
 
 def _month_range(year, month):
@@ -89,21 +91,6 @@ class DashboardView(APIView):
             ).distinct()
         caja_chica = float(caja.aggregate(s=Sum('monto'))['s'] or 0)
 
-        residuos_qs = RecojoDetalle.objects.filter(recojo__in=recojos).values(
-            'tipo__nombre', 'tipo__color', 'tipo__codigo'
-        ).annotate(peso=Sum('peso_kg')).order_by('-peso')
-        residuos = [
-            {
-                'nombre': r['tipo__nombre'],
-                'color': r['tipo__color'],
-                'codigo': r['tipo__codigo'],
-                'peso': float(r['peso'] or 0),
-            }
-            for r in residuos_qs
-        ]
-        if not residuos and kg_mes:
-            residuos = [{'nombre': 'Sin clasificar', 'color': '#94a3b8', 'codigo': 'otros', 'peso': kg_mes}]
-
         por_ciudad_qs = recojos.values('sede__ciudad__nombre').annotate(peso=Sum('peso_kg')).order_by('-peso')
         recojo_por_ciudad = [
             {'ciudad': r['sede__ciudad__nombre'] or 'Sin ciudad', 'peso': float(r['peso'] or 0)}
@@ -172,13 +159,25 @@ class DashboardView(APIView):
                     preventivos_vencidos += 1
                 elif alerta['estado'] == 'por_vencer':
                     preventivos_por_vencer += 1
+        doc_kwargs = {}
         if solo_asignados(request.user):
-            documentos_vencidos, documentos_por_vencer = contar_alertas_documentos(
-                vehiculo_ids=[veh.id for veh in vehiculos],
-                user_ids=[request.user.id],
-            )
-        else:
-            documentos_vencidos, documentos_por_vencer = contar_alertas_documentos()
+            doc_kwargs = {
+                'vehiculo_ids': [veh.id for veh in vehiculos],
+                'user_ids': [request.user.id],
+            }
+        documentos_vencidos, documentos_por_vencer = contar_alertas_documentos(**doc_kwargs)
+        documentos_alerta = listar_alertas_documentos(**doc_kwargs)
+        avisos = [
+            {
+                'id': n.id,
+                'tipo': n.tipo,
+                'titulo': n.titulo,
+                'mensaje': n.mensaje,
+                'leida': n.leida,
+                'creado_en': n.creado_en.isoformat() if n.creado_en else None,
+            }
+            for n in Notificacion.objects.filter(usuario=request.user)[:8]
+        ]
 
         return Response({
             'mes': f'{year:04d}-{month:02d}',
@@ -190,7 +189,6 @@ class DashboardView(APIView):
             'clientes_publicos': publicos,
             'clientes_privados': privados,
             'caja_chica': caja_chica,
-            'residuos': residuos,
             'recojo_por_ciudad': recojo_por_ciudad,
             'viajes_hoy_list': viajes_hoy_list,
             'flota': flota,
@@ -200,4 +198,6 @@ class DashboardView(APIView):
             'preventivos_por_vencer': preventivos_por_vencer,
             'documentos_vencidos': documentos_vencidos,
             'documentos_por_vencer': documentos_por_vencer,
+            'documentos_alerta': documentos_alerta,
+            'avisos': avisos,
         })
