@@ -271,7 +271,7 @@ export function ClientesPage() {
   return (
     <>
       <Topbar title="Clientes" />
-      <div className="flex min-h-0 flex-1 gap-4 p-6">
+      <div className="flex min-h-0 flex-1 gap-4 p-4 lg:p-6">
         <div className="min-w-0 flex-1 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             {["clientes", "ciudades"].map((s) => (
@@ -296,9 +296,9 @@ export function ClientesPage() {
                 {t === "todos" ? "Todos" : t === "publico" ? "Públicos" : "Privados"}
               </button>
             ))}
-            <div className="relative ml-auto">
+            <div className="relative w-full sm:ml-auto sm:w-56">
               <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-              <input className={`${inputClass} w-56 pl-9`} placeholder="Buscar cliente…" value={q} onChange={(e) => setQ(e.target.value)} />
+              <input className={`${inputClass} w-full pl-9`} placeholder="Buscar cliente…" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
             <CiudadFields
               filter
@@ -324,7 +324,7 @@ export function ClientesPage() {
           </div>
           {seccion === "clientes" && (
             <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="stat rounded-box bg-base-100 shadow-sm">
               <div className="stat-value text-2xl">{stats.total}</div>
               <div className="stat-desc">clientes</div>
@@ -403,7 +403,7 @@ export function ClientesPage() {
         onClose={() => setModalCliente(false)}
         onSubmit={saveCliente}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="RUC / DNI">
             <input
               className={inputClass}
@@ -431,7 +431,7 @@ export function ClientesPage() {
         {naturaleza === "persona" && (
           <>
             <div className="divider my-1">Persona</div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Field label="Nombre">
                 <input className={inputClass} value={form.titular.nombre} onChange={(e) => setTitular({ nombre: e.target.value })} />
               </Field>
@@ -464,7 +464,7 @@ export function ClientesPage() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Field label="Nombre">
                 <input className={inputClass} value={c.nombre} onChange={(e) => setContacto(i, { nombre: e.target.value })} />
               </Field>
@@ -498,7 +498,7 @@ export function ClientesPage() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Field label="Nombre (opcional)">
                 <input className={inputClass} placeholder="Se genera si lo dejas vacío" value={s.nombre} onChange={(e) => setSede(i, { nombre: e.target.value })} />
               </Field>
@@ -600,7 +600,7 @@ export function ClientesPage() {
             </select>
           </Field>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Field label="Nombre">
               <input className={inputClass} value={sedeForm.persona_nueva.nombre} onChange={(e) => setSedeForm({ ...sedeForm, persona_nueva: { ...sedeForm.persona_nueva, nombre: e.target.value } })} />
             </Field>

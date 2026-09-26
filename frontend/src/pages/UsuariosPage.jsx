@@ -208,7 +208,7 @@ export function UsuariosPage() {
   return (
     <>
       <Topbar title="Usuarios y roles" />
-      <div className="flex min-h-0 flex-1 gap-4 p-6">
+      <div className="flex min-h-0 flex-1 gap-4 p-4 lg:p-6">
         <div className="min-w-0 flex-1 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -241,10 +241,10 @@ export function UsuariosPage() {
             )}
           </div>
 
-          <div className="relative w-fit">
+          <div className="relative w-full sm:w-56">
             <Search size={16} className="absolute left-3 top-2.5 text-muted" />
             <input
-              className={`${filterClass} w-56 pl-9`}
+              className={`${filterClass} w-full pl-9 sm:w-56`}
               placeholder={tab === "usuarios" ? "Buscar usuario" : "Buscar rol"}
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -417,7 +417,7 @@ export function UsuariosPage() {
           </span>
         </label>
         <div className="overflow-x-auto rounded-box border border-base-300">
-          <table className="table table-sm">
+          <table className="table table-sm min-w-[28rem]">
             <thead>
               <tr>
                 <th>Módulo</th>

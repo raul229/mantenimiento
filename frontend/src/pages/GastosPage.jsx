@@ -250,7 +250,7 @@ export function GastosPage() {
   return (
     <>
       <Topbar title="Caja y gastos" />
-      <div className="flex min-h-0 flex-1 gap-4 p-6">
+      <div className="flex min-h-0 flex-1 gap-4 p-4 lg:p-6">
         <div className="min-w-0 flex-1 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -280,18 +280,18 @@ export function GastosPage() {
           {tab === "viajes" && (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
+                <select className={filterSelectClass} value={estado} onChange={(e) => setEstado(e.target.value)}>
                   <option value="">Estado de caja</option>
                   <option value="sin_fondo">Sin fondo</option>
                   <option value="abierta">Abierta</option>
                   <option value="cerrada">Cerrada</option>
                 </select>
-                <div className="relative">
+                <div className="relative w-full sm:w-56">
                   <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-                  <input className={`${filterClass} w-56 pl-9`} placeholder="Ruta, placa o encargado" value={q} onChange={(e) => setQ(e.target.value)} />
+                  <input className={`${filterClass} w-full pl-9 sm:w-56`} placeholder="Ruta, placa o encargado" value={q} onChange={(e) => setQ(e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <Mini n={formatMoney(kpis.fondo)} label="fondo asignado" />
                 <Mini n={formatMoney(kpis.gastado)} label="gastos" />
                 <Mini n={formatMoney(kpis.saldo)} label="saldo" />
@@ -309,9 +309,9 @@ export function GastosPage() {
           )}
           {tab === "categorias" && (
             <>
-              <div className="relative w-fit">
+              <div className="relative w-full sm:w-56">
                 <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-                <input className={`${filterClass} w-56 pl-9`} placeholder="Buscar categoría" value={q} onChange={(e) => setQ(e.target.value)} />
+                <input className={`${filterClass} w-full pl-9 sm:w-56`} placeholder="Buscar categoría" value={q} onChange={(e) => setQ(e.target.value)} />
               </div>
               <DataTable
                 columns={catColumns}

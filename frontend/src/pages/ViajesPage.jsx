@@ -260,7 +260,7 @@ export function ViajesPage() {
   return (
     <>
       <Topbar title="Rutas y viajes" />
-      <div className="flex min-h-0 flex-1 gap-4 p-6">
+      <div className="flex min-h-0 flex-1 gap-4 p-4 lg:p-6">
         <div className="min-w-0 flex-1 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className={`btn btn-sm rounded-full ${tab === "viajes" ? "btn-primary" : "btn-ghost bg-base-100"}`} onClick={() => setTab("viajes")}>
@@ -298,19 +298,19 @@ export function ViajesPage() {
                   placeholder="Ciudad"
                   onNueva={canWrite("viajes") ? () => setModalCiudad(true) : undefined}
                 />
-                <input type="date" className={`${filterClass} w-40`} value={fecha} onChange={(e) => setFecha(e.target.value)} />
-                <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
+                <input type="date" className={filterClass} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+                <select className={filterSelectClass} value={estado} onChange={(e) => setEstado(e.target.value)}>
                   <option value="">Estado</option>
                   <option value="programado">Pendiente</option>
                   <option value="en curso">En proceso</option>
                   <option value="completado">Completado</option>
                 </select>
-                <div className="relative">
+                <div className="relative w-full sm:w-56">
                   <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-                  <input className={`${filterClass} w-48 pl-9`} placeholder="Buscar ruta, placa o conductor" value={q} onChange={(e) => setQ(e.target.value)} />
+                  <input className={`${filterClass} w-full pl-9 sm:w-56`} placeholder="Buscar ruta, placa o conductor" value={q} onChange={(e) => setQ(e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
                 <Mini n={kpis.total} label="viajes" />
                 <Mini n={kpis.curso} label="en proceso" />
                 <Mini n={kpis.done} label="completados" />

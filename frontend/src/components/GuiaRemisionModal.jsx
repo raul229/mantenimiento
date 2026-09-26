@@ -65,7 +65,7 @@ export function GuiaRemisionModal({ open, ids = [], viaje = null, onClose }) {
   const total = viaje ? null : ids.length;
   return (
     <dialog className="modal modal-open">
-      <div className="modal-box flex h-[90vh] max-w-5xl flex-col bg-base-100">
+      <div className="modal-box flex h-[90dvh] w-[min(64rem,calc(100vw-1rem))] max-w-5xl flex-col bg-base-100">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold">
             {total === 1 ? "Guía de remisión" : "Guías de remisión"}
@@ -86,14 +86,14 @@ export function GuiaRemisionModal({ open, ids = [], viaje = null, onClose }) {
           )}
         </div>
 
-        <div className="modal-action">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
+        <div className="modal-action flex-col-reverse sm:flex-row">
+          <button type="button" className="btn btn-ghost w-full sm:w-auto" onClick={onClose}>
             Cerrar
           </button>
-          <button type="button" className="btn" disabled={!url} onClick={imprimir}>
+          <button type="button" className="btn w-full sm:w-auto" disabled={!url} onClick={imprimir}>
             <Printer size={16} /> Imprimir
           </button>
-          <button type="button" className="btn btn-primary" disabled={!url || descargando} onClick={descargar}>
+          <button type="button" className="btn btn-primary w-full sm:w-auto" disabled={!url || descargando} onClick={descargar}>
             <Download size={16} /> {descargando ? "Generando…" : "Descargar PDF"}
           </button>
         </div>

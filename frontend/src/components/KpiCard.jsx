@@ -5,7 +5,7 @@ export function KpiCard({ title, value, hint, icon, accent, children }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm text-muted">{title}</p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight">{value}</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">{value}</p>
             {hint && <p className="mt-2 text-xs text-muted">{hint}</p>}
           </div>
           {icon && (

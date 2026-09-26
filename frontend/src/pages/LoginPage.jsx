@@ -23,7 +23,7 @@ export function LoginPage() {
   });
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-secondary p-6">
+    <div className="flex min-h-dvh items-center justify-center bg-secondary p-4 sm:p-6">
       <form
         onSubmit={(e) => {
           e.preventDefault();

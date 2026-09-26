@@ -147,20 +147,20 @@ export function DocumentosTab({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <select className={`${filterSelectClass} w-40`} value={ambito} onChange={(e) => setAmbito(e.target.value)}>
+        <select className={filterSelectClass} value={ambito} onChange={(e) => setAmbito(e.target.value)}>
           <option value="">Todos</option>
           <option value="vehiculo">Vehículos</option>
           <option value="user">Conductores</option>
         </select>
-        <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
+        <select className={filterSelectClass} value={estado} onChange={(e) => setEstado(e.target.value)}>
           <option value="">Cualquier estado</option>
           <option value="vencido">Vencidos</option>
           <option value="por_vencer">Por vencer</option>
           <option value="vigente">Vigentes</option>
         </select>
-        <div className="relative">
+        <div className="relative w-full sm:w-56">
           <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-          <input className={`${filterClass} w-56 pl-9`} placeholder="Titular, tipo o número" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className={`${filterClass} w-full pl-9 sm:w-56`} placeholder="Titular, tipo o número" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         {puedeTaller && (
           <button type="button" className="btn btn-primary ml-auto" onClick={abrirNuevo}>

@@ -52,7 +52,7 @@ export function EmisorPage() {
   return (
     <>
       <Topbar title="Datos de emisión" />
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 lg:p-6">
         {loading ? (
           <div className="flex justify-center rounded-box bg-base-100 p-8">
             <span className="loading loading-spinner loading-md text-primary" />

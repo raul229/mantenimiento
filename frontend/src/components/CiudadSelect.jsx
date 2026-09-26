@@ -23,7 +23,7 @@ export function CiudadFields({
   return (
     <div className="flex items-center gap-2">
       <select
-        className={`${filter ? `${filterSelectClass} w-40` : selectClass} bg-base-100`}
+        className={`${filter ? filterSelectClass : selectClass} bg-base-100`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >

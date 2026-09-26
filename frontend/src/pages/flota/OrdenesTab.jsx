@@ -159,15 +159,15 @@ export function OrdenesTab({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
+        <select className={filterSelectClass} value={estado} onChange={(e) => setEstado(e.target.value)}>
           <option value="">Estado</option>
           <option value="abierta">Abierta</option>
           <option value="en_taller">En taller</option>
           <option value="cerrada">Cerrada</option>
         </select>
-        <div className="relative">
+        <div className="relative w-full sm:w-56">
           <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-          <input className={`${filterClass} w-56 pl-9`} placeholder="Placa u orden" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className={`${filterClass} w-full pl-9 sm:w-56`} placeholder="Placa u orden" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         {puedeTaller && (
           <button type="button" className="btn btn-primary ml-auto" onClick={() => { setForm(vacioOrden); setModalOrden(true); }}>

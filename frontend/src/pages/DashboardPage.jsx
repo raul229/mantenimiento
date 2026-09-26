@@ -40,7 +40,7 @@ export function DashboardPage() {
     return (
       <>
         <Topbar title="Panel operativo" />
-        <div className="p-6 text-muted">Cargando dashboard…</div>
+        <div className="p-4 text-muted lg:p-6">Cargando dashboard…</div>
       </>
     );
   }
@@ -58,9 +58,9 @@ export function DashboardPage() {
           placeholder="Todas las ciudades"
           onNueva={can("clientes") ? () => setModalCiudad(true) : undefined}
         />
-        <input type="month" className={`${inputClass} w-40`} value={mes} onChange={(e) => setMes(e.target.value)} />
+        <input type="month" className={`${inputClass} w-full sm:w-40`} value={mes} onChange={(e) => setMes(e.target.value)} />
       </Topbar>
-      <div className="space-y-4 p-6">
+      <div className="space-y-4 p-4 lg:p-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             title="Recojo del mes"
@@ -150,9 +150,9 @@ export function DashboardPage() {
             <h2 className="card-title mb-2 text-base">Recojo por ciudad</h2>
             <div className="h-52">
               <ResponsiveContainer>
-                <BarChart data={d.recojo_por_ciudad || []} layout="vertical" margin={{ left: 24, right: 12 }}>
+                <BarChart data={d.recojo_por_ciudad || []} layout="vertical" margin={{ left: 8, right: 8 }}>
                   <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="ciudad" width={90} tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="ciudad" width={72} tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v) => formatKg(v)} />
                   <Bar dataKey="peso" fill="#0f766e" radius={[0, 8, 8, 0]} />
                 </BarChart>

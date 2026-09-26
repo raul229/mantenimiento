@@ -223,7 +223,7 @@ export function FlotaPage() {
   return (
     <>
       <Topbar title="Flota y taller" />
-      <div className="flex min-h-0 flex-1 flex-col gap-4 p-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:p-6">
         <div className="flex flex-wrap items-center gap-2">
           {tabs.map(([id, label]) => (
             <button
@@ -236,12 +236,12 @@ export function FlotaPage() {
             </button>
           ))}
           {tab === "flota" && puedeTaller && (
-            <button type="button" onClick={openVehiculo} className="btn btn-primary ml-auto">
+            <button type="button" onClick={openVehiculo} className="btn btn-primary w-full sm:ml-auto sm:w-auto">
               <Plus size={16} /> Nuevo vehículo
             </button>
           )}
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat n={stats.total} label="vehículos" />
           <Stat n={stats.operativos} label="operativos" color="text-emerald-700" />
           <Stat n={stats.en_taller} label="en taller" color="text-amber-700" />
@@ -259,7 +259,7 @@ export function FlotaPage() {
                   onClick={() => setSelectedId(v.id)}
                   className={`flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-sm ${selected?.id === v.id ? "ring-2 ring-accent" : ""}`}
                 >
-                  <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-muted">
+                  <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-muted sm:h-16 sm:w-24">
                     {v.foto_url ? <img src={v.foto_url} alt="" className="h-full w-full object-cover" /> : <Truck />}
                   </div>
                   <div className="min-w-0 flex-1">

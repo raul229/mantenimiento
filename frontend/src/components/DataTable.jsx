@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { flexRender } from "@tanstack/react-table";
 import { getCoreRowModel, getPaginationRowModel, useLegacyTable } from "@tanstack/react-table/legacy";
 
@@ -58,12 +59,12 @@ export function DataTable({
   return (
     <div className="overflow-hidden rounded-box bg-base-100 shadow-sm">
       <div className="overflow-x-auto">
-        <table className="table">
+        <table className="table table-sm md:table-md min-w-[40rem]">
           <thead>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id}>
                 {group.headers.map((header) => (
-                  <th key={header.id}>
+                  <th key={header.id} className="whitespace-nowrap">
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
@@ -83,7 +84,7 @@ export function DataTable({
                 className={`${onRowClick ? "cursor-pointer hover:bg-base-200" : ""} ${selectedId === row.original.id ? "bg-primary/10" : ""}`}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id}>
+                  <td key={cell.id} className="whitespace-nowrap">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -93,18 +94,19 @@ export function DataTable({
         </table>
       </div>
       {total > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-base-200 px-4 py-3">
-          <p className="text-sm text-muted">
+        <div className="flex flex-col gap-3 border-t border-base-200 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
+          <p className="text-center text-sm text-muted sm:text-left">
             {desde}–{hasta} de {total}
           </p>
-          <div className="join">
+          <div className="join justify-center">
             <button
               type="button"
               className="btn btn-sm join-item"
               disabled={!table.getCanPreviousPage()}
               onClick={() => table.previousPage()}
             >
-              Anterior
+              <ChevronLeft size={16} />
+              <span className="hidden sm:inline">Anterior</span>
             </button>
             <span className="btn btn-sm join-item btn-ghost pointer-events-none">
               {pageIndex + 1} / {Math.max(pageCount, 1)}
@@ -115,11 +117,12 @@ export function DataTable({
               disabled={!table.getCanNextPage()}
               onClick={() => table.nextPage()}
             >
-              Siguiente
+              <span className="hidden sm:inline">Siguiente</span>
+              <ChevronRight size={16} />
             </button>
           </div>
           <select
-            className="select select-bordered select-sm w-24"
+            className="select select-bordered select-sm w-full sm:w-24"
             value={size}
             onChange={(e) => table.setPageSize(Number(e.target.value))}
             aria-label="Filas por página"

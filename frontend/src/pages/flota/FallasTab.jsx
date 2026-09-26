@@ -147,16 +147,16 @@ export function FallasTab({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
+        <select className={filterSelectClass} value={estado} onChange={(e) => setEstado(e.target.value)}>
           <option value="pendientes">Pendientes</option>
           <option value="abierta">Abiertas</option>
           <option value="en_orden">En orden</option>
           <option value="reparada">Reparadas</option>
           <option value="">Todas</option>
         </select>
-        <div className="relative">
+        <div className="relative w-full sm:w-56">
           <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-          <input className={`${filterClass} w-56 pl-9`} placeholder="Placa o falla" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className={`${filterClass} w-full pl-9 sm:w-56`} placeholder="Placa o falla" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         {puedeTaller && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setNombreTipo(""); setModalTipo(true); }}>

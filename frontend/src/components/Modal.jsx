@@ -2,14 +2,14 @@ export function Modal({ open, title, onClose, onSubmit, submitLabel = "Guardar",
   if (!open) return null;
   return (
     <dialog className="modal modal-open" aria-labelledby="modal-title">
-      <div className={`modal-box bg-base-100 ${wide ? "max-w-4xl" : ""}`}>
+      <div className={`modal-box w-[min(48rem,calc(100vw-1.5rem))] bg-base-100 ${wide ? "max-w-4xl" : ""}`}>
         <h2 id="modal-title" className="text-lg font-bold">{title}</h2>
-        <div className="max-h-[70vh] space-y-3 overflow-y-auto py-4">{children}</div>
-        <div className="modal-action">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
+        <div className="max-h-[min(70vh,32rem)] space-y-3 overflow-y-auto py-4">{children}</div>
+        <div className="modal-action flex-col-reverse sm:flex-row">
+          <button type="button" className="btn btn-ghost w-full sm:w-auto" onClick={onClose}>
             Cancelar
           </button>
-          <button type="button" className="btn btn-primary" onClick={onSubmit}>
+          <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={onSubmit}>
             {submitLabel}
           </button>
         </div>
@@ -32,5 +32,5 @@ export function Field({ label, children }) {
 
 export const inputClass = "input input-bordered w-full";
 export const selectClass = "select select-bordered w-full";
-export const filterClass = "input input-bordered h-10";
-export const filterSelectClass = "select select-bordered h-10";
+export const filterClass = "input input-bordered h-10 w-full min-w-0 sm:w-40";
+export const filterSelectClass = "select select-bordered h-10 w-full min-w-0 sm:w-40";

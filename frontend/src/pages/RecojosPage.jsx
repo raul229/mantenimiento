@@ -201,10 +201,10 @@ export function RecojosPage() {
   return (
     <>
       <Topbar title="Recojos" />
-      <div className="flex min-h-0 flex-1 gap-4 p-6">
+      <div className="flex min-h-0 flex-1 gap-4 p-4 lg:p-6">
         <div className="min-w-0 flex-1 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <input type="date" className={`${filterClass} w-40`} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+            <input type="date" className={filterClass} value={fecha} onChange={(e) => setFecha(e.target.value)} />
             <CiudadFields
               filter
               value={ciudad}
@@ -213,14 +213,14 @@ export function RecojosPage() {
               placeholder="Ciudad"
               onNueva={can("clientes") ? () => setModalCiudad(true) : undefined}
             />
-            <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
+            <select className={filterSelectClass} value={estado} onChange={(e) => setEstado(e.target.value)}>
               <option value="">Estado</option>
               <option value="pendiente">Pendiente</option>
               <option value="completado">Completado</option>
             </select>
-            <div className="relative">
+            <div className="relative w-full sm:w-56">
               <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-              <input className={`${filterClass} w-52 pl-9`} placeholder="Cliente, sede o ruta" value={q} onChange={(e) => setQ(e.target.value)} />
+              <input className={`${filterClass} w-full pl-9 sm:w-56`} placeholder="Cliente, sede o ruta" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
             {can("guias") && (
             <button
@@ -240,7 +240,7 @@ export function RecojosPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Mini n={kpis.total} label="recojos" />
             <Mini n={formatKg(kpis.kgMes)} label="kg este mes" />
             <Mini n={kpis.delMes} label="recojos del mes" />

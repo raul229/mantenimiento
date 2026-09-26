@@ -132,16 +132,16 @@ export function PreventivosTab({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <select className={`${filterSelectClass} w-40`} value={estado} onChange={(e) => setEstado(e.target.value)}>
+        <select className={filterSelectClass} value={estado} onChange={(e) => setEstado(e.target.value)}>
           <option value="">Estado</option>
           <option value="vencido">Vencido</option>
           <option value="por_vencer">Por vencer</option>
           <option value="al_dia">Al día</option>
           <option value="sin_registro">Sin registro</option>
         </select>
-        <div className="relative">
+        <div className="relative w-full sm:w-56">
           <Search size={16} className="absolute left-3 top-2.5 text-muted" />
-          <input className={`${filterClass} w-56 pl-9`} placeholder="Placa o servicio" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className={`${filterClass} w-full pl-9 sm:w-56`} placeholder="Placa o servicio" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         {puedeTaller && (
           <>
