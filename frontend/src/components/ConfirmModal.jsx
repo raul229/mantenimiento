@@ -13,7 +13,7 @@ export function ConfirmModal({
     <dialog className="modal modal-open">
       <div className="modal-box bg-base-100">
         <h3 className="text-lg font-bold">{titulo}</h3>
-        <p className="py-4">{mensaje}</p>
+        <div className="py-4 text-sm">{mensaje}</div>
         <div className="modal-action">
           <button type="button" className="btn btn-ghost" onClick={onHide}>Cancelar</button>
           <button type="button" className={`btn ${confirmClass}`} onClick={onConfirm}>{confirmText}</button>

@@ -9,6 +9,7 @@ import { Topbar } from "@/layout/Topbar";
 import { DetailPanel } from "@/components/DetailPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Modal } from "@/components/Modal";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { ESTADO_FLOTA, ESTADO_SERVICIO, formatKm } from "@/utils/format";
 import { useAuth } from "@/context/AuthContext";
 import { FallasTab } from "@/pages/flota/FallasTab";
@@ -31,15 +32,64 @@ const emptyForm = {
   nivel_combustible: 50,
 };
 
+function n(value) {
+  return Number(value || 0);
+}
+
+function impactoBorrado(v) {
+  const viajes = n(v.viajes_count);
+  const abiertos = n(v.viajes_abiertos);
+  const guias = n(v.guias_count);
+  const fallas = n(v.fallas_total);
+  const ordenes = n(v.ordenes_count);
+  const historial = n(v.historial_count);
+  const docs = n(v.documentos_count);
+  return {
+    viajes,
+    abiertos,
+    guias,
+    fallas,
+    ordenes,
+    historial,
+    docs,
+    tiene: viajes + abiertos + guias + fallas + ordenes + historial + docs > 0,
+  };
+}
+
+function mensajeBorrarVehiculo(v) {
+  const i = impactoBorrado(v);
+  if (!i.tiene) return `¿Eliminar ${v.placa}? No tiene viajes ni historial.`;
+  const lineas = [];
+  if (i.abiertos) lineas.push(`Hay ${i.abiertos === 1 ? "un viaje abierto" : `${i.abiertos} viajes abiertos`}.`);
+  if (i.viajes) lineas.push(`${i.viajes} ${i.viajes === 1 ? "viaje queda" : "viajes quedan"} sin unidad.`);
+  if (i.guias) lineas.push(i.guias === 1 ? "La guía emitida se conserva (placa ya copiada)." : `Las ${i.guias} guías se conservan (placa ya copiada).`);
+  const taller = [];
+  if (i.fallas) taller.push(`${i.fallas} ${i.fallas === 1 ? "falla" : "fallas"}`);
+  if (i.ordenes) taller.push(`${i.ordenes} ${i.ordenes === 1 ? "orden" : "órdenes"}`);
+  if (i.historial) taller.push(`${i.historial} ${i.historial === 1 ? "servicio" : "servicios"}`);
+  if (i.docs) taller.push(`${i.docs} ${i.docs === 1 ? "documento" : "documentos"}`);
+  if (taller.length) lineas.push(`Se borra el taller: ${taller.join(", ")}.`);
+  return (
+    <>
+      <p className="mb-2 font-medium">¿Eliminar {v.placa}?</p>
+      <ul className="list-disc space-y-1 pl-4">
+        {lineas.map((linea) => <li key={linea}>{linea}</li>)}
+      </ul>
+    </>
+  );
+}
+
 export function FlotaPage() {
-  const { user, canWrite } = useAuth();
+  const { user, canWrite, canDelete } = useAuth();
   const puedeTaller = canWrite("flota") && !user?.solo_asignados;
+  const puedeBorrar = puedeTaller && canDelete("flota");
   const puedeReportar = canWrite("flota");
 
   const invalidate = useInvalidate();
   const [tab, setTab] = useState("flota");
   const [selectedId, setSelectedId] = useState(null);
   const [modal, setModal] = useState(false);
+  const [borrar, setBorrar] = useState(null);
   const [q, setQ] = useState("");
 
   const { data: vehiculos = [], isLoading: loadingFlota } = useApiList(qk.vehiculos, () => VehiculoService.getAll());
@@ -81,7 +131,22 @@ export function FlotaPage() {
     qk.tiposServicio,
     qk.documentos({ tipo_entidad: "vehiculo" }),
     qk.notificaciones,
+    qk.viajes,
   );
+
+  const confirmarBorrado = async () => {
+    if (!borrar) return;
+    try {
+      await VehiculoService.remove(borrar.id);
+      toast.success(`Se eliminó ${borrar.placa}`);
+      if (selectedId === borrar.id) setSelectedId(null);
+      setBorrar(null);
+      recargar();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "No se pudo eliminar el vehículo");
+      setBorrar(null);
+    }
+  };
 
   const form = useAppForm({
     defaultValues: emptyForm,
@@ -227,6 +292,11 @@ export function FlotaPage() {
                     Reportar falla
                   </button>
                 )}
+                {puedeBorrar && (
+                  <button type="button" className="btn btn-ghost btn-error mt-2 w-full" onClick={() => setBorrar(selected)}>
+                    Eliminar vehículo
+                  </button>
+                )}
               </DetailPanel>
             )}
           </div>
@@ -306,6 +376,14 @@ export function FlotaPage() {
         <TextField form={form} name="anio" label="Año" type="number" />
         <TextField form={form} name="kilometraje_actual" label="Kilometraje actual (odómetro)" type="number" min="0" />
       </Modal>
+      <ConfirmModal
+        show={!!borrar}
+        onHide={() => setBorrar(null)}
+        onConfirm={confirmarBorrado}
+        titulo={borrar && impactoBorrado(borrar).tiene ? "Este vehículo tiene historial" : "Eliminar vehículo"}
+        mensaje={borrar ? mensajeBorrarVehiculo(borrar) : ""}
+        confirmText="Eliminar"
+      />
     </>
   );
 }

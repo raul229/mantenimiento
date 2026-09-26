@@ -10,7 +10,7 @@ export function LoginPage() {
   const [error, setError] = useState("");
 
   const form = useAppForm({
-    defaultValues: { username: "admin", password: "" },
+    defaultValues: { username: "", password: "" },
     schema: loginSchema,
     onSubmit: async (value) => {
       setError("");

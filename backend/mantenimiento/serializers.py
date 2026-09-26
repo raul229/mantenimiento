@@ -78,6 +78,13 @@ class VehiculoSerializer(serializers.ModelSerializer):
     estado_operativo = serializers.SerializerMethodField()
     foto_url = serializers.SerializerMethodField()
     fallas_abiertas = serializers.IntegerField(read_only=True, default=0)
+    viajes_count = serializers.IntegerField(read_only=True, default=0)
+    viajes_abiertos = serializers.IntegerField(read_only=True, default=0)
+    guias_count = serializers.IntegerField(read_only=True, default=0)
+    fallas_total = serializers.IntegerField(read_only=True, default=0)
+    ordenes_count = serializers.IntegerField(read_only=True, default=0)
+    historial_count = serializers.IntegerField(read_only=True, default=0)
+    documentos_count = serializers.IntegerField(read_only=True, default=0)
     preventivos = serializers.SerializerMethodField()
 
     class Meta:

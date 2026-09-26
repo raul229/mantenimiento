@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
-from django.db.models import Count, Q
+from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Coalesce
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -37,10 +38,31 @@ class VehiculoViewSet(viewsets.ModelViewSet):
     serializer_class = VehiculoSerializer
 
     def get_queryset(self):
-        qs = services.vehiculos_visibles(self.request.user).select_related('conductor_asignado').annotate(
-            fallas_abiertas=Count('fallas', filter=Q(fallas__estado__in=[Falla.ABIERTA, Falla.EN_ORDEN, Falla.NO_REPARADA])),
+        docs = (
+            Documento.objects.filter(tipo_entidad='vehiculo', entidad_id=OuterRef('pk'))
+            .order_by()
+            .values('entidad_id')
+            .annotate(c=Count('id'))
+            .values('c')
         )
-        return qs
+        return services.vehiculos_visibles(self.request.user).select_related('conductor_asignado').annotate(
+            fallas_abiertas=Count(
+                'fallas',
+                filter=Q(fallas__estado__in=[Falla.ABIERTA, Falla.EN_ORDEN, Falla.NO_REPARADA]),
+                distinct=True,
+            ),
+            viajes_count=Count('viajes', distinct=True),
+            viajes_abiertos=Count(
+                'viajes',
+                filter=Q(viajes__kilometraje_final__isnull=True) & ~Q(viajes__estado='cancelado'),
+                distinct=True,
+            ),
+            guias_count=Count('viajes__recojos__guia', distinct=True),
+            fallas_total=Count('fallas', distinct=True),
+            ordenes_count=Count('mantenimientos', distinct=True),
+            historial_count=Count('historial_servicios', distinct=True),
+            documentos_count=Coalesce(Subquery(docs, output_field=IntegerField()), Value(0)),
+        )
 
     def perform_create(self, serializer):
         if not services.puede_gestionar_taller(self.request.user):
