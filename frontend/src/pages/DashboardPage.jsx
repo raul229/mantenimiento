@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recha
 import { Scale, Truck, Users, Wallet } from "lucide-react";
 import { DashboardService, CiudadService } from "@/service/api";
 import { Topbar } from "@/layout/Topbar";
+import { DataTable } from "@/components/DataTable";
 import { KpiCard } from "@/components/KpiCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ESTADO_VIAJE, ESTADO_FLOTA, ESTADO_DOCUMENTO, formatDate, formatDateTime, formatKg, formatMoney, monthISO } from "@/utils/format";
@@ -13,6 +14,14 @@ import { CiudadFields, NuevaCiudadModal } from "@/components/CiudadSelect";
 import { useAuth } from "@/context/AuthContext";
 import { useApiList } from "@/hooks/useApiQuery";
 import { qk } from "@/query/keys";
+
+const columnasViajesHoy = [
+  { header: "Ruta", accessor: "ruta" },
+  { header: "Ciudad", render: (v) => v.ciudad || "—" },
+  { header: "Vehículo", render: (v) => v.vehiculo || "—" },
+  { header: "Kg", render: (v) => formatKg(v.kg) },
+  { header: "Estado", render: (v) => <StatusBadge map={ESTADO_VIAJE} value={v.estado} /> },
+];
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -161,33 +170,12 @@ export function DashboardPage() {
                   Ver todos →
                 </button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="table table-sm">
-                  <thead>
-                    <tr>
-                      <th>Ruta</th>
-                      <th>Ciudad</th>
-                      <th>Vehículo</th>
-                      <th>Kg</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(d.viajes_hoy_list || []).map((v) => (
-                      <tr key={v.id}>
-                        <td className="font-medium">{v.ruta}</td>
-                        <td>{v.ciudad || "—"}</td>
-                        <td>{v.vehiculo || "—"}</td>
-                        <td>{formatKg(v.kg)}</td>
-                        <td><StatusBadge map={ESTADO_VIAJE} value={v.estado} /></td>
-                      </tr>
-                    ))}
-                    {!(d.viajes_hoy_list || []).length && (
-                      <tr><td className="py-6 text-muted" colSpan={5}>No hay viajes hoy</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={columnasViajesHoy}
+                data={d.viajes_hoy_list || []}
+                empty="No hay viajes hoy"
+                pageSize={10}
+              />
             </div>
           </div>
           {can("flota") && (
